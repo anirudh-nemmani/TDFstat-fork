@@ -8,6 +8,15 @@ See the [documentation page](https://polgraw.github.io/TDFstat/) for more detail
 
 > :warning: Repository under construction! We are moving here from [the old repository](https://github.com/mbejger/polgraw-allsky).
 
+The repository contains a submodule (`gridgen`). To clone with submodule use:
+```
+git clone --recurse-submodules https://github.com/Polgraw/TDFstat.git
+#or 
+git clone https://github.com/Polgraw/TDFstat.git
+git submodule init
+git submodule update
+```
+
 ## Contributors
 
 In alphabetic order: 
