@@ -1,4 +1,4 @@
-CC = gcc
+CC = gcc -g -O2
 USE_LAL = yes
 
 ifeq ($(strip $(USE_LAL)), yes)
@@ -34,3 +34,4 @@ clean:
 	$(MAKE) -C $(INIPARSER_DIR) veryclean
 
 .PHONY:	clean
+
