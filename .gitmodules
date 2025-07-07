@@ -1,0 +1,3 @@
+[submodule "gridgen"]
+	path = gridgen
+	url = https://github.com/apisarski/gridgen
