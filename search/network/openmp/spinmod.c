@@ -15,8 +15,8 @@
 
 
 void spindown_modulation(const int nifo, const int N, const FLOAT_TYPE het1,
- 			          const FLOAT_TYPE spnd, const FLOAT_TYPE _tmp1[][N],
-			          FFTW_PRE(_complex) *fxa, FFTW_PRE(_complex) *fxb)
+                         const FLOAT_TYPE spnd, const FLOAT_TYPE _tmp1[][N],
+                         FFTW_PRE(_complex) *fxa, FFTW_PRE(_complex) *fxb)
 {
      int i, n;
 
