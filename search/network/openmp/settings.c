@@ -41,7 +41,7 @@ void search_settings(Search_settings* sett)
      // we assume minimum NS age 1000 yr
      double fdotmin, fdotmax;
      if (sett->fpo < 200.) {
-          fdotmin = (sett->fpo+B)/(2.*1000.*C_YEARSEC);
+          fdotmin = 4.*(sett->fpo+B)/(2.*1000.*C_YEARSEC);
           fdotmax = 0.;
      } else {
           fdotmin = 1e-10;
@@ -49,10 +49,10 @@ void search_settings(Search_settings* sett)
      }
 
      // dimensionless spindown range
-     Smax = 2.*M_PI*fdotmin*dt*dt;
-     Smin = 2.*M_PI*fdotmax*dt*dt;
-     //Smax = M_PI*fdotmin*dt*dt;
-     //Smin = M_PI*fdotmax*dt*dt;
+     //Smax = 2.*M_PI*fdotmin*dt*dt;
+     //Smin = 2.*M_PI*fdotmax*dt*dt;
+     Smax = M_PI*fdotmin*dt*dt;
+     Smin = M_PI*fdotmax*dt*dt;
 
      nd = 2;     // Degree of freedom, (2*nd = deg. no ofrees of freedom for chi^2)
 
