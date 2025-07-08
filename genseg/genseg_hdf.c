@@ -28,7 +28,7 @@ int main (int argc, char *argv[]) {
      char td_fname[MAX_LINE+32], td_dir[MAX_LINE],
           ini_fname[MAX_LINE], date_fname[MAX_LINE+16];
      int  N, nod, i, yndx, notempty, bufsize = BUFSIZE,
-          use_sci, nout, nseg, overwrite;
+          use_sci, nout, nseg, overwrite, first_seg=1;
      double alpha, dt, othr, w_taper_dt, maxasd;
      struct stat st = {0};
      dictionary *ini; // config file
@@ -71,6 +71,7 @@ int main (int argc, char *argv[]) {
      H5FileName = iniparser_getstring (ini, "genseg:infile", NULL);// input HDF5 file
      startgps = iniparser_getdouble(ini, "genseg:startgps", 0.0);  // write time sequences starting from this time
      nod = iniparser_getint (ini, "genseg:nod", 0);                // number of days per segment
+     first_seg = iniparser_getint (ini, "genseg:first_seg", 1);    // no of the first segment, default is 1
      nseg = iniparser_getint (ini, "genseg:nseg", 0);              // number of segments, infinity if <=0
      plsr = iniparser_getstring (ini, "genseg:plsr", NULL);        // pulsar name or band number
      DataDir = iniparser_getstring (ini, "genseg:datadir", NULL);  // output directory
@@ -97,7 +98,7 @@ int main (int argc, char *argv[]) {
           strcpy(oband, argv[2]);
           printf("[INFO] Band number overwrite enabled: bbbb -> %s\n", oband);
           // substitute bbbb in the input file name and plsr with oband
-          char *p = strstr(H5FileName, "bbbb");
+          char p[4] = strstr(H5FileName, "bbbb");
           if (p != NULL) {
                strncpy(p, oband, 4);
           } else {
@@ -338,13 +339,14 @@ int main (int argc, char *argv[]) {
      int ichunk=1;
 
      for (iseg=1; iseg<=nseg; ++iseg){
-          int chunk_i0, chunk_i1;
+          int iseg_name = iseg+first_seg-1; // segment naming starts from first_seg
+          int chunk_i0=0, chunk_i1=0; // initialized to zero to avoid compiler warnings
           // zero whole segment
           memset(xtime, 0, N*sizeof(float));
           tseg_start = startgps + (iseg-1)*N*dt;
           tseg_end = tseg_start + (N-1)*dt;
           printf("------------------------------------------------------\n");
-          printf("[INFO] Generating  iseg=%d  tseg_start=%f  tseg_end=%f\n", iseg, tseg_start, tseg_end);
+          printf("[INFO] Generating  iseg=%d  tseg_start=%f  tseg_end=%f\n", iseg_name, tseg_start, tseg_end);
 
           while(ichunk<=last_ichunk){
                int length = snprintf( NULL, 0, "%d", ichunk );
@@ -560,19 +562,19 @@ int main (int argc, char *argv[]) {
           /**************************/
           /* write output files     */
           /**************************/
-          sprintf(td_dir, "%s/%03d", DataDir, iseg);
+          sprintf(td_dir, "%s/%03d", DataDir, iseg_name);
           if (stat (td_dir, &st) == -1) {
                mkdir (td_dir, 0755);
           }
-          sprintf(td_dir, "%s/%03d/%s", DataDir, iseg, site);
+          sprintf(td_dir, "%s/%03d/%s", DataDir, iseg_name, site);
           if (stat (td_dir, &st) == -1) {
                mkdir (td_dir, 0755);
           }
           // standard filename format
-          sprintf(td_fname, "%s/xdat_%03d_%s.bin", td_dir, iseg, plsr);
+          sprintf(td_fname, "%s/xdat_%03d_%s.bin", td_dir, iseg_name, plsr);
           sprintf(date_fname, "%s/starting_date", td_dir);
 
-          printf ("[INFO] Writing segment %03d : ", iseg);
+          printf ("[INFO] Writing segment %03d : ", iseg_name);
           // Do "xall" contains only zeros?
           notempty=0;
           for (yndx=0; yndx < N; yndx++){
