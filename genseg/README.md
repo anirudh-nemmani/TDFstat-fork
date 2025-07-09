@@ -14,12 +14,11 @@ In addition:
 
 Compilation:
 ```
-conda activate lal
-make genseg-hdf
+mamba activate lal
+make
 ```
 
 Run:
 ```
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-./genseg-hdf <config.g2d>
+./genseg-hdf <config_file_name>
 ```

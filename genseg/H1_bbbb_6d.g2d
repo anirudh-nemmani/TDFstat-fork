@@ -1,22 +1,25 @@
 [genseg]
 
-# single input file in HDF5 format (shall we support multiple files?)
-infile = sts_B0.25_ov0.1/H1/sts_bbbb_H1.h5
+# single input file in HDF5 format
+infile = sts_B1_ov4/H1/sts_bbbb_H1.h5
 
-# Starting time for time seqments
-startgps = 1238163456
+# Starting time for time seqments (here: O4a start)
+startgps = 1368975618
 
 # number of days, length of single time segment
 nod = 6
 
+# number of the first segment
+startseg = 1
+
 # how many time segments to generate
-nseg = 99
+nseg = 40
 
 # Pulsar name / band number
 plsr = bbbb
 
 # Output data directory
-DataDir = xdat_O3
+DataDir = xdat_O4_6d
 
 # allow to overwrite existing data and starting_date (useful for incremental analysis) 
 overwrite = yes
@@ -26,17 +29,17 @@ overwrite = yes
 alpha = 0.1
 
 # max. ASD, othr = 10*maxasd*sqrt(B)*einstein_factor
-maxasd = 1.e-21
+maxasd = 1e-21
 
 # Replace outliers (both large and Grubbs) with zero or random gaussian value
-out_replace = gauss
+out_replace = zero
 
 #------------------- analysis ready segments -------------
 # Do remove non scientific data?   
 use_sci = yes
 
 # list of scientific regions in gps time
-sci_regions = O3_C01_H1_sci_segments
+sci_regions = O4ab_H1_gps_sci_segments
 
 # Tukey window tapering size in seconds; if <=0 do not apply window to science regions
 w_taper_dt = 600.
@@ -44,7 +47,7 @@ w_taper_dt = 600.
 
 #------------------- Ephemeris ----------------------------
 # Whether to generate detector ephemeris
-gen_eph = yes
+gen_eph = no
 
 # Path to ephemeris files
 EphDir = ./
@@ -52,3 +55,4 @@ EphDir = ./
 # Ephemeris files for Earth and Sun (distributed in lalsuite)
 efile = earth00-40-DE405.dat
 sfile = sun00-40-DE405.dat
+
