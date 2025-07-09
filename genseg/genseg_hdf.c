@@ -28,7 +28,7 @@ int main (int argc, char *argv[]) {
      char td_fname[MAX_LINE+32], td_dir[MAX_LINE],
           ini_fname[MAX_LINE], date_fname[MAX_LINE+16];
      int  N, nod, i, yndx, notempty, bufsize = BUFSIZE,
-          use_sci, nout, nseg, overwrite, first_seg=1;
+          use_sci, nout, nseg, overwrite, startseg=1;
      double alpha, dt, othr, w_taper_dt, maxasd;
      struct stat st = {0};
      dictionary *ini; // config file
@@ -71,7 +71,7 @@ int main (int argc, char *argv[]) {
      H5FileName = iniparser_getstring (ini, "genseg:infile", NULL);// input HDF5 file
      startgps = iniparser_getdouble(ini, "genseg:startgps", 0.0);  // write time sequences starting from this time
      nod = iniparser_getint (ini, "genseg:nod", 0);                // number of days per segment
-     first_seg = iniparser_getint (ini, "genseg:first_seg", 1);    // no of the first segment, default is 1
+     startseg = iniparser_getint (ini, "genseg:startseg", 1);    // no of the first segment, default is 1
      nseg = iniparser_getint (ini, "genseg:nseg", 0);              // number of segments, infinity if <=0
      plsr = iniparser_getstring (ini, "genseg:plsr", NULL);        // pulsar name or band number
      DataDir = iniparser_getstring (ini, "genseg:datadir", NULL);  // output directory
@@ -98,7 +98,7 @@ int main (int argc, char *argv[]) {
           strcpy(oband, argv[2]);
           printf("[INFO] Band number overwrite enabled: bbbb -> %s\n", oband);
           // substitute bbbb in the input file name and plsr with oband
-          char p[4] = strstr(H5FileName, "bbbb");
+          char *p = strstr(H5FileName, "bbbb");
           if (p != NULL) {
                strncpy(p, oband, 4);
           } else {
@@ -135,8 +135,8 @@ int main (int argc, char *argv[]) {
 #else
      printf("[IN] gen_eph = %d\n", gen_eph);
      if (gen_eph) {
-	 printf("[ERROR] gen_eph = %d but the code was compiled without lalsuite.\n        Please set USE_LAL = yes in the Makefile\n", gen_eph);
-	 exit(EXIT_FAILURE);
+          printf("[ERROR] gen_eph = %d but the code was compiled without lalsuite.\n        Please set USE_LAL = yes in the Makefile\n", gen_eph);
+          exit(EXIT_FAILURE);
      }
 #endif
 
@@ -156,7 +156,7 @@ int main (int argc, char *argv[]) {
           if (hstat < 0) {printf("[HDF] Error reading attribute last_ichunk\n"); goto fail;}
           if (last_ichunk < 0) {printf("[HDF] Error: last_ichunk < 0 \n"); goto fail;}
           printf("[HDF] Opened %s \n      [read only mode][format_version = %d]\n", H5FileName, format_version);
-          // getting creation plist for file doesn't work, use root group
+          // getting creation plist for a file doesn't work, use root group
           hid_t rgroup = H5Gopen(infile_id, "/", H5P_DEFAULT);
           hid_t info = H5Gget_create_plist(rgroup);
           unsigned flags;
@@ -339,7 +339,7 @@ int main (int argc, char *argv[]) {
      int ichunk=1;
 
      for (iseg=1; iseg<=nseg; ++iseg){
-          int iseg_name = iseg+first_seg-1; // segment naming starts from first_seg
+          int iseg_name = iseg+startseg-1; // segment naming starts from startseg
           int chunk_i0=0, chunk_i1=0; // initialized to zero to avoid compiler warnings
           // zero whole segment
           memset(xtime, 0, N*sizeof(float));
