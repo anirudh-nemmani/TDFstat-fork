@@ -31,26 +31,18 @@ void search_settings(Search_settings* sett)
      nfft = 1 << (int)ceil(log(N)/log(2.));    // length of FFT
      s = 1;                                    // No. of spindowns
 
-     /*
-     Smin = 1000.*C_YEARSEC;   // Minimum spindown time [sec.]
-     // Maximum spindown (1000 years) [angular, dimensionless]
-     Smax = 2.*M_PI*(sett->fpo + B)*dt*dt/(2.*Smin);
-     */
-
-     // spindown range of NS
+     // spindown range of NS in physical units [Hz/s]
      // we assume minimum NS age 1000 yr
      double fdotmin, fdotmax;
      if (sett->fpo < 200.) {
-          fdotmin = 4.*(sett->fpo+B)/(2.*1000.*C_YEARSEC);
+          fdotmin = 2.*(sett->fpo+B)/(2.*1000.*C_YEARSEC);
           fdotmax = 0.;
      } else {
-          fdotmin = 1e-10;
-          fdotmax = 1e-11;
+          fdotmin = 2e-10;
+          fdotmax = 2e-11;
      }
 
      // dimensionless spindown range
-     //Smax = 2.*M_PI*fdotmin*dt*dt;
-     //Smin = 2.*M_PI*fdotmax*dt*dt;
      Smax = M_PI*fdotmin*dt*dt;
      Smin = M_PI*fdotmax*dt*dt;
 
