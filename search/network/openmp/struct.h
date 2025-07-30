@@ -64,8 +64,17 @@ typedef struct _fftw_arrays {
 /* Search range  */
 typedef struct _search_range {
 
-     int pmr[2], mr[2], nr[2], spndr[2];
-     int pst, mst, nst, sst;
+     // Hemispheres range: pmr[0] - start, pmr[1] - end; values are 1 or 2.
+     // fr is always integer (fft bins) and limits only the OUTPUT range, max range is 0 to nfft-1
+     int pmr[2], fr[2];
+     // mm,nn,s ranges: [0] - start, [1] - end
+     float mr[2], nr[2], spndr[2];
+     // grid steps (default =1)
+     float mstep, nstep, sstep;
+
+     // initial values after restart
+     float mst, nst, sst;
+     int pst;
 
 } Search_range;
 

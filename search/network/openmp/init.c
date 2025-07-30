@@ -394,7 +394,6 @@ void add_signal( Search_settings *sett,
      gsl_permutation *p = gsl_permutation_alloc (4);
 
      gsl_linalg_LU_decomp (&m.matrix, p, &s);
-     gsl_linalg_LU_solve (&m.matrix, p, &b.vector, x);
 
      s_range->spndr[0] = round(gsl_vector_get(x,1));
      s_range->nr[0]    = round(gsl_vector_get(x,2));
@@ -501,6 +500,30 @@ void set_search_range( Search_settings *sett,
 		             Command_line_opts *opts,
                        Search_range *s_range)
 {
+     /*
+     Sets the search range in the code units.
+     The grid is based on the allsky "integer" grid but fractional coordinates are allowed.
+     There are 3 options:
+     - no range_file specified: the whole sky is searched (=standard allsky search)
+     - range_file of "allsky" type: standard allsky grid is used but the search is performed
+                                    around the nearest "integer" grid point to the given pssition in fdot, alpha & delta,
+                                    in the integer range +/- gsize, steps are set to 1.
+     - range_file of "directed" type: the search is performed on the "fractional" grid centered exactly
+                                      around the given coordinates, with specified grid step,
+                                      and in the range +/- gsize
+     The unit of gsize and step is always 1 (= resolution of the standard allsky grid in each direction)
+     e.g. gsize=2.5 and step=0.5 results in range +/- 5 grid points
+     but the grid is twice denser than the regular "allsky" grid.
+     */
+
+     float fr,
+          sr, sr_gsize, sr_step,
+          alphar, deltar, nr_gsize, nr_step, mr_gsize, mr_step;
+     float alpha0, delta0;
+     int fr_gsize, fmid;
+     float smid, nmid, mmid;
+     double sgnlol[4];
+     char gtype[16];
 
      // Hemispheres (with respect to the ecliptic)
      if(opts->hemi) {
@@ -511,117 +534,152 @@ void set_search_range( Search_settings *sett,
           s_range->pmr[1] = 2;
      }
 
+     s_range->mstep = 1.;
+     s_range->nstep = 1.;
+     s_range->sstep = 1.;
+
      // If the parameter range is invoked, the search is performed
      // within the range of grid parameters from an ascii file
      // ("-r range_file" from the command line)
-     FILE *data;
-     if (strlen (opts->range_file)) {
-
-          if ((data = fopen(opts->range_file, "r")) != NULL) {
-
-               int aqq = fscanf(data, "%d %d %d %d %d %d %d %d",
-                                s_range->spndr, 1+s_range->spndr,
-                                s_range->nr, 1+s_range->nr,
-                                s_range->mr, 1+s_range->mr,
-                                s_range->pmr, 1+s_range->pmr);
-
-               /*
-               //#mb commented-out for now - useful for tests
-
-               // the case when range file does not contain 8 integers
-               // describing the grid ranges, but other values:
-               // the pulsar position, frequency, and spindowns.
-               if(range_status!=8) {
-
-               rewind(data);
-               range_status = fscanf (data, "%le %le %le %le %le %le %d",
-               &pepoch, &alpha, &delta, &f0, &f1, &f2, &gsize);
-
-               // GPS time of the first sample
-               double gps1;
-               sprintf (filename, "%s/%03d/starting_date", dtaprefix, ident);
-               if ((data2 = fopen (filename, "r")) != NULL) {
-               fscanf (data2, "%le", &gps1);
-               fclose(data2);
-               } else {
-               perror (filename);
-               return 1;
-               }
-
-               // Conversion of mjd to gps time
-               double pepoch_gps = (pepoch - 44244)*86400 - 51.184;
-               //			 gps1 = (gps1 - 44244)*86400 - 51.184;
-
-               // Interpolation of ephemeris parameters to the starting time
-               double *sgnlo;
-               sgnlo = (double *) calloc (4, sizeof (double));
-
-               double *be;
-               be = (double *) calloc (2, sizeof (double));
-
-               // ast2lin (auxi.c) returns the hemisphere number
-               // and the vector be (used for sky position in linear coords.)
-               pmr[0] = ast2lin(alpha, delta, epsm, be);
-
-               sgnlo[0] = f0 + f1*(gps1 - pepoch_gps) + f2*pow(gps1 - pepoch_gps, 2)/2.;
-               sgnlo[0] = 2*M_PI*2*sgnlo[0]*dt - oms;
-
-               sgnlo[1] = f1 + f2*(gps1 - pepoch_gps);
-               sgnlo[1] = M_PI*2*sgnlo[1]*dt*dt;
-
-               sgnlo[2] = be[0]*(oms + sgnlo[0]);
-               sgnlo[3] = be[1]*(oms + sgnlo[0]);
-
-               // solving a linear system in order to translate
-               // sky position, frequency and spindown (sgnlo parameters)
-               // into the position in the grid
-
-               gsl_vector *x = gsl_vector_alloc (4);
-               int s;
-
-               gsl_matrix_view m = gsl_matrix_view_array (M, 4, 4);
-               gsl_matrix_transpose (&m.matrix) ;
-               gsl_vector_view b = gsl_vector_view_array (sgnlo, 4);
-               gsl_permutation *p = gsl_permutation_alloc (4);
-
-               gsl_linalg_LU_decomp (&m.matrix, p, &s);
-               gsl_linalg_LU_solve (&m.matrix, p, &b.vector, x);
-
-               spndr[0] = round(gsl_vector_get(x, 1));
-               nr[0]		= round(gsl_vector_get(x, 2));
-               mr[0]		= round(gsl_vector_get(x, 3));
-
-               gsl_permutation_free (p);
-               gsl_vector_free (x);
-               free (be);
-               free (sgnlo);
-
-
-               // Warnings and infos
-               if(hemi)
-
-               printf("Warning: -h switch hemisphere choice (%d) may be altered\nby the choice of -r grid range...\n", hemi);
-
-               // Define the grid range in which the signal will be looked for
-               spndr[1] = spndr[0] + gsize ;
-               spndr[0] -= gsize;
-               nr[1] = nr[0] + gsize ;
-               nr[0] -= gsize;
-               mr[1] = mr[0] + gsize ;
-               mr[0] -= gsize;
-               pmr[1] = pmr[0];
-
-               }
-               */
-
-               fclose (data);
-
-          } else {
+     FILE *data = NULL;
+     if (strlen(opts->range_file)) {
+          if ((data = fopen(opts->range_file, "r")) == NULL) {
+               fflush(stdout);
                perror (opts->range_file);
                exit(EXIT_FAILURE);
           }
 
-     } else {
+          // Read lines, skipping those starting with '#'
+          char line[512];
+          do {
+               if (!fgets(line, sizeof(line), data)) {
+                    printf("Unexpected end of file while reading gtype\n");
+                    exit(EXIT_FAILURE);
+               }
+          } while (line[0] == '#');
+          sscanf(line, "%s", gtype);
+
+          do {
+               if (!fgets(line, sizeof(line), data)) {
+                    printf("Unexpected end of file while reading fr and fr_gsize\n");
+                    exit(EXIT_FAILURE);
+               }
+          } while (line[0] == '#');
+          sscanf(line, "%f %d", &fr, &fr_gsize);
+
+          do {
+               if (!fgets(line, sizeof(line), data)) {
+                    printf("Unexpected end of file while reading sr, sr_gsize, sr_step\n");
+                    exit(EXIT_FAILURE);
+               }
+          } while (line[0] == '#');
+          sscanf(line, "%f %f %f", &sr, &sr_gsize, &sr_step);
+
+          do {
+               if (!fgets(line, sizeof(line), data)) {
+                    printf("Unexpected end of file while reading alphar, deltar, nr_gsize, nr_step, mr_gsize, mr_step\n");
+                    exit(EXIT_FAILURE);
+               }
+          } while (line[0] == '#');
+          sscanf(line, "%f %f %f %f %f %f", &alphar, &deltar, &nr_gsize, &nr_step, &mr_gsize, &mr_step);
+
+          fclose(data);
+
+          // convert fr, sr, alphar, deltar to fractional code units
+
+          // first convert from physical to dimensionless units
+          sgnlol[0] = (fr - sett->fpo)/sett->B * M_PI;
+          sgnlol[1] = M_PI * sr * sett->dt * sett->dt;
+
+          float cof = sett->oms + sgnlol[0];
+          double be[2];
+          s_range->pmr[0] = ast2lin((double)alphar, (double)deltar, C_EPSMA, be);
+          s_range->pmr[1] = s_range->pmr[0];
+          sgnlol[2] = be[0]*cof;
+          sgnlol[3] = be[1]*cof;
+
+          // dimensionless to code units conversion
+          float *sgnl_code = (float *) calloc(4, sizeof(float));
+          dimless_to_code(sett->M, sgnlol, sgnl_code);
+
+          if ( strncmp(gtype, "allsky", 6) == 0) {
+
+               // Standard allsky grid centered around
+               // nearest "integer" grid point to alphar, deltar, sr.
+               // gsize will be rounded to the nearest integer
+               // steps are ignored and set to 1.
+               //
+               // nearest "integer" grid point
+               fmid = round(sgnl_code[0]);
+               smid = round(sgnl_code[1]);
+               nmid = round(sgnl_code[2]);
+               mmid = round(sgnl_code[3]);
+
+               s_range->fr[0] = fmid - fr_gsize;
+               s_range->fr[1] = fmid + fr_gsize;
+               s_range->spndr[0] = smid - round(sr_gsize);
+               s_range->spndr[1] = smid + round(sr_gsize);
+               s_range->nr[0] = nmid - round(nr_gsize);
+               s_range->nr[1] = nmid + round(nr_gsize);
+               s_range->mr[0] = mmid - round(mr_gsize);
+               s_range->mr[1] = mmid + round(mr_gsize);
+
+               // TODO: check for out of scale ranges
+               //
+               // steps were already set to 1 by default
+
+          } else if (strncmp(gtype, "directed", 8) == 0) {
+
+               // Standard allsky grid centered around
+               // alphar, deltar, sr.
+               // gsize and steps can be fractional
+               //
+               // nearest "integer" grid point
+               fmid = sgnl_code[0];
+               smid = sgnl_code[1];
+               nmid = sgnl_code[2];
+               mmid = sgnl_code[3];
+
+               s_range->fr[0] = fmid - fr_gsize;
+               s_range->fr[1] = fmid + fr_gsize;
+               s_range->spndr[0] = smid - round(sr_gsize);
+               s_range->spndr[1] = smid + round(sr_gsize);
+               s_range->nr[0] = nmid - round(nr_gsize);
+               s_range->nr[1] = nmid + round(nr_gsize);
+               s_range->mr[0] = mmid - round(mr_gsize);
+               s_range->mr[1] = mmid + round(mr_gsize);
+
+               // TODO: check for out of scale ranges
+
+               s_range->mstep = mr_step;
+               s_range->nstep = nr_step;
+               s_range->sstep = sr_step;
+
+          } else {
+
+               printf("Unknown grid type %s in range file %s\n", gtype, opts->range_file);
+               exit(EXIT_FAILURE);
+
+          }
+
+          free(sgnl_code);
+
+          printf("[set_search_range] gtype=%s\n", gtype);
+          printf("[set_search_range] f=%g [Hz]  fdot=%g [Hz/s]  ra=%g [rad]  de=%g [rad]\n", fr, sr, alphar, deltar);
+          printf("[set_search_range] hemisphere = %d\n", s_range->pmr[0]);
+          printf("[set_search_range] Integer grid ranges:\n");
+          printf("-----------------------------------------------------------------------\n");
+          printf("   |            min           center              max             step \n");
+          printf("-----------------------------------------------------------------------\n");
+          printf("mm |   %12g     %12g     %12g     %12g\n", s_range->mr[0], mmid, s_range->mr[1], s_range->mstep);
+          printf("nn |   %12g     %12g     %12g     %12g\n", s_range->nr[0], nmid, s_range->nr[1], s_range->nstep);
+          printf("s  |   %12g     %12g     %12g     %12g\n", s_range->spndr[0], smid, s_range->spndr[1], s_range->sstep);
+          printf("f  |   %12d     %12d     %12d     %12d\n", s_range->fr[0], fmid, s_range->fr[1], 1);
+          printf("-----------------------------------------------------------------------\n\n");
+
+          //printf("Smin: %le, -Smax: %le\n", sett->Smin, sett->Smax);
+
+     } else {  // grid_range not specified, use all-sky grid
 
           // Establish the grid range in which the search will be performed
           // with the use of the M matrix from grid.bin
@@ -629,37 +687,16 @@ void set_search_range( Search_settings *sett,
                  s_range->nr, s_range->mr,
                  sett->oms, sett->Smax);
 
-          if (strlen(opts->dump_range_file)) {
+          printf("[set_search_range] gtype=allsky, grid max ranges:\n");
+          printf("[set_search_range] spndr={%g %g} nr={%g %g} mr={%g %g} pmr={%d %d}\n",
+               s_range->spndr[0], s_range->spndr[1], s_range->nr[0], s_range->nr[1],
+               s_range->mr[0], s_range->mr[1], s_range->pmr[0], s_range->pmr[1]);
 
-               FILE *data;
-               if ((data=fopen (opts->dump_range_file, "w")) != NULL) {
-                    fprintf(data, "%d %d\n%d %d\n%d %d\n%d %d\n",
-                            s_range->spndr[0], s_range->spndr[1],
-                            s_range->nr[0], s_range->nr[1],
-                            s_range->mr[0], s_range->mr[1],
-                            s_range->pmr[0], s_range->pmr[1] );
-
-                    printf("Wrote input data grid ranges to %s\n", opts->dump_range_file);
-                    fclose (data);
-                    exit(EXIT_SUCCESS);
-
-               } else {
-
-                    printf("Can't open %s file for writing\n", opts->dump_range_file);
-                   	exit(EXIT_FAILURE);
-
-               }
-          }
      }
 
-     printf("set_search_range() - the grid ranges are maximally this:\n");
-     printf("(spndr, nr, mr, pmr pairs): %d %d %d %d %d %d %d %d\n",
-            s_range->spndr[0], s_range->spndr[1], s_range->nr[0], s_range->nr[1],
-            s_range->mr[0], s_range->mr[1], s_range->pmr[0], s_range->pmr[1]);
+     //exit(EXIT_SUCCESS);
 
-     printf("Smin: %le, -Smax: %le\n", sett->Smin, sett->Smax);
-
-} // end of set search range
+} // end of set_search_range
 
 
 /* FFT Plans	 */
@@ -762,7 +799,7 @@ void read_checkpoints( Command_line_opts *opts,
           if((state = fopen(opts->state_file, "r")) != NULL) {
 
                // Scan the state file to get last recorded parameters
-               if((fscanf(state, "%d %d %d %d %d", &s_range->pst, &s_range->mst,
+               if((fscanf(state, "%d %f %f %f %d", &s_range->pst, &s_range->mst,
                                                    &s_range->nst, &s_range->sst, FNum)) == EOF) {
 
                     // This means that state file is empty (=end of the calculations)

@@ -10,6 +10,11 @@
 
 #include "auxi.h"
 
+#include "gsl/gsl_vector.h"
+#include <gsl/gsl_linalg.h>
+#include <gsl/gsl_math.h>
+#include <gsl/gsl_eigen.h>
+
 #include <omp.h>
 
 
@@ -52,6 +57,37 @@ int ast2lin (double alfa, double delta, double epsm, double *be)
      return pm;
 } /* ast2lin */
 
+
+// Converts from dimmensionless to integer, code units of f, s, mm, nn
+
+int dimless_to_code(double *M, double *pos_dimless, float *pos_code)
+{
+     double *MM;
+     MM = (double *)calloc(16, sizeof(double));
+     for (int i=0; i<16; i++) {
+          MM[i] = M[i];
+     }
+     gsl_vector *x = gsl_vector_alloc(4);
+     int s;
+
+     gsl_matrix_view m = gsl_matrix_view_array(MM, 4, 4);
+     gsl_matrix_transpose (&m.matrix) ;
+     gsl_vector_view b = gsl_vector_view_array(pos_dimless, 4);
+     gsl_permutation *p = gsl_permutation_alloc(4);
+
+     gsl_linalg_LU_decomp(&m.matrix, p, &s);
+     gsl_linalg_LU_solve(&m.matrix, p, &b.vector, x);
+
+     pos_code[0] = (float)gsl_vector_get(x,0);
+     pos_code[1] = (float)gsl_vector_get(x,1);
+     pos_code[2] = (float)gsl_vector_get(x,2);
+     pos_code[3] = (float)gsl_vector_get(x,3);
+
+     gsl_permutation_free (p);
+     gsl_vector_free (x);
+     free (MM);
+     return EXIT_SUCCESS;
+}
 
 
 inline void spline(complex double *y, int n, complex double *y2)
@@ -225,7 +261,7 @@ double var (float *x, int n)
 
 
 
-void gridr (double *M, int *spndr, int *nr, int *mr, double oms, double Smax)
+void gridr (double *M, float *spndr, float *nr, float *mr, double oms, double Smax)
 {
      double cof, Mp[16], smx[64], d, Ob;
      int i, j, indx[4];
@@ -248,7 +284,7 @@ void gridr (double *M, int *spndr, int *nr, int *mr, double oms, double Smax)
      Ob = M_PI;
      cof = oms + Ob;
 
-     //Mp - macierz transponowana
+     //Mp - transposition of M
      for (i=0; i<4; i++)
           for (j=0; j<4; j++)
                Mp[4*i+j] = M[4*j+i];
@@ -420,8 +456,8 @@ int lubksb (double *a, int n, int *indx, double *b)
           if (ii>=0)
                for (j=ii; j<=i-1; j++)
                     sum -= a[n*i+j]*b[j];
-               else if (sum)
-                    ii = i;
+          else if (sum)
+               ii = i;
           b[i] = sum;
      }
      for (i=n-1; i>=0; i--) {

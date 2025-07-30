@@ -20,8 +20,8 @@ void search(
 
 int job_core(
      	     int pm,                   // hemisphere
-     	     int mm,                   // grid 'sky position'
-     	     int nn,                   // other grid 'sky position'
+     	     float mm,                 // grid 'sky position'
+     	     float nn,                 // other grid 'sky position'
      	     Search_settings *sett,    // search settings
      	     Command_line_opts *opts,  // cmd opts
      	     Search_range *s_range,    // range for searching

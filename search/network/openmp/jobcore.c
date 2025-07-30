@@ -36,9 +36,10 @@ void search( Search_settings *sett,
 
      struct flock lck;
 
-     int pm, mm, nn;       // hemisphere, sky positions
-     int sgnlc=0;          // number of candidates
-     FLOAT_TYPE *sgnlv;    // array with candidates data
+     int pm;              // hemisphere
+     float mm, nn;        // sky positions
+     int sgnlc=0;         // number of candidates
+     FLOAT_TYPE *sgnlv;   // array with candidates data
      long totsgnl;        // total number of candidates
 
      char outname[1100];
@@ -60,7 +61,7 @@ void search( Search_settings *sett,
           state = fopen (opts->state_file, "w");
           // spindown below is wrong if addsig or range_file is used
           // but then we don't need checkpointing
-          fprintf(state, "%d %d %d %d %d\n", s_range->pst, s_range->mst,
+          fprintf(state, "%d %f %f %f %d\n", s_range->pst, s_range->mst,
                s_range->nst, s_range->sst, *FNum);
           fseek(state, 0, SEEK_SET);
      }
@@ -77,8 +78,16 @@ void search( Search_settings *sett,
 
           /* Two main loops over sky positions */
 
-          for (mm=s_range->mst; mm<=s_range->mr[1]; ++mm) {
-               for (nn=s_range->nst; nn<=s_range->nr[1]; ++nn) {
+          // imm & inn allow to transform loop indices from float to int
+          int imm_size = (s_range->mr[1]-s_range->mst)/s_range->mstep + 1;
+          //for (mm=s_range->mst; mm<=s_range->mr[1]; ++mm) {
+          for (int imm=0; imm<imm_size; ++imm) {
+               mm = s_range->mst + imm*s_range->mstep;
+
+               int inn_size = (s_range->nr[1]-s_range->nst)/s_range->nstep + 1;
+               //for (nn=s_range->nst; nn<=s_range->nr[1]; ++nn) {
+               for (int inn=0; inn<inn_size; ++inn) {
+                    nn = s_range->nst + inn*s_range->nstep;
 
                     /* Loop over spindowns is inside job_core() */
                     status = job_core(
@@ -119,7 +128,7 @@ void search( Search_settings *sett,
 
                          if(opts->checkp_flag) {
                               ftruncate(fileno(state), 0);
-                              fprintf(state, "%d %d %d %d %d\n", pm, mm, nn+1, s_range->sst, *FNum);
+                              fprintf(state, "%d %f %f %f %d\n", pm, mm, nn+1, s_range->sst, *FNum);
                               fseek(state, 0, SEEK_SET);
                               if (save_state == 1) {
                                    //printf("%d %d %d %d %d\n", pm, mm, nn+1, s_range->sst, *FNum);
@@ -178,8 +187,8 @@ void search( Search_settings *sett,
 
 int job_core(
                int pm,                   // Hemisphere
-               int mm,                   // Grid 'sky position'
-               int nn,                   // Second grid 'sky position'
+               float mm,                   // Grid 'sky position'
+               float nn,                   // Second grid 'sky position'
                Search_settings *sett,    // Search settings
                Command_line_opts *opts,  // Search options
                Search_range *s_range,    // Range for searching
@@ -191,7 +200,7 @@ int job_core(
                int *FNum)                // Candidate signal number
 {
      int i, j, n;
-     int smin = s_range->sst, smax = s_range->spndr[1];
+     float smin = s_range->sst, smax = s_range->spndr[1];
      double al1, al2, sinalt, cosalt, sindelt, cosdelt, nSource[3], ft, het0;
      FLOAT_TYPE sgnlt[NPAR], sgnl0;
      FLOAT_TYPE _tmp1[sett->nifo][sett->N] __attribute__((aligned(128)));
@@ -232,7 +241,7 @@ int job_core(
      // if not, returns NULL
      if ((sqr(al1)+sqr(al2))/sqr(sett->oms) > 1.) return 0;
 
-     int ss;
+     float ss;
      double shft1, phase, cp, sp;
      complex double exph;
 
@@ -241,7 +250,6 @@ int job_core(
           &sinalt, &cosalt, &sindelt, &cosdelt);
 
      // calculate declination and right ascention
-     // written in file as candidate signal sky positions
      sgnlt[2] = asin(sindelt);
      sgnlt[3] = fmod(atan2(sinalt, cosalt) + 2.*M_PI, 2.*M_PI);
 
@@ -391,8 +399,8 @@ int job_core(
           }
      }
 
-     const int s_stride = 1;
-     printf ("\n>>%d\t%d\t%d\t[%d..%d:%d]\n", *FNum, mm, nn, smin, smax, s_stride);
+     //const int s_stride = s_range->sstep;
+     printf ("\n>>%d\t%f\t%f\t[%f..%f:%f]\n", *FNum, mm, nn, smin, smax, s_range->sstep);
 
      static FFTW_PRE(_complex) *fxa, *fxb;
      fxa = fftw_arr->fxa;
@@ -410,7 +418,10 @@ int job_core(
 
      /* Spindown loop  */
 
-     for (ss=smin; ss<=smax; ss += s_stride) {
+     int iss_size = (smax-smin)/s_range->sstep + 1;
+     //for (ss=smin; ss<=smax; ss += s_stride) {
+     for (int iss=0; iss<iss_size; ++iss) {
+          ss = smin + iss*s_range->sstep;
 
 #if TIMERS>2
           //tstart = get_current_time(CLOCK_PROCESS_CPUTIME_ID);
@@ -541,7 +552,7 @@ int job_core(
                     (*sgnlc)++;
 
 #ifdef VERBOSE
-                    printf ("\nSignal %d: %d %d %d %d %d snr=%.2f\n",
+                    printf ("\nSignal %d: %d %f %f %f %d snr=%.2f\n",
                          *sgnlc, pm, mm, nn, ss, ii, sgnlt[4]);
 #endif
                } // if veto_status
