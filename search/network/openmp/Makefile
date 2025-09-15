@@ -11,7 +11,11 @@ SIMD = AVX2
 # PREC = [FLOAT, DOUBLE] precission used in the spindown loop and for output
 PREC = FLOAT
 
-#FFTW_DIR = /opt/fftw/3.3.10-gcc9-mvapich2.2
+# Modifications specific to the science run. Currently implemented values:
+# O3 - double input data, input filenames start with "xdatsc_",
+# anything else - no modifications except of executable filename
+SCI_RUN = O3
+
 #FFTW_DIR = $(CONDA_PREFIX)
 FFTW_DIR = /opt/fftw/3.3.10-gcc11-mvapich2/
 
@@ -40,8 +44,9 @@ else
 	FFTW_FLOAT_LIBS =
 endif
 
+
 #TARGET = gwsearch-${ARCH}-$(shell echo $(PERF) | tr A-Z a-z)-oldtrig
-TARGET = gwsearch-${ARCH}-$(shell echo $(PERF) | tr A-Z a-z)
+TARGET = gwsearch-${ARCH}-${SCI_RUN}-$(shell echo $(PERF) | tr A-Z a-z)
 
 VER := $(shell git rev-parse HEAD)
 
@@ -50,7 +55,7 @@ CC = gcc -std=gnu17 -static-libgcc -fopenmp #-flto
 
 # TIMERS=1 measure total time, TIMERS=3 measure spindown loop time
 # PREFIX is the default output directory
-CFLAGS = -DPREFIX="./candidates" -DCODEVER=$(VER) -DTIMERS=3 -D$(SINCOS) -UUSE_LOCKING  -DCOMP_${PREC} ${VCFLAGS} #-DVERBOSE
+CFLAGS = -DPREFIX="./candidates" -DCODEVER=$(VER) -DTIMERS=3 -D$(SINCOS) -UUSE_LOCKING  -DCOMP_${PREC} -DSCI_RUN=${SCI_RUN} ${VCFLAGS} #-DVERBOSE
 CFLAGS += -I$(FFTW_DIR)/include -I$(INIPARSER_DIR)/src
 CFLAGS += -g -Wall -Wno-unused \
 	  -O3 -ffast-math  -funsafe-loop-optimizations -funroll-loops \

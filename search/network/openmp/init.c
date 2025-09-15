@@ -207,7 +207,16 @@ void init_arrays( Search_settings *sett,
           // subdirectories
 
           if((data = fopen(ifo[i].xdatname, "r")) != NULL) {
+#if SCI_RUN==O3
+               double *tmp_xdat;
+               tmp_xdat = (double *) calloc(sett->N, sizeof(double));
+               status = fread((void *)(tmp_xdat), sizeof(double), sett->N, data);
+               for (int j=0; j<sett->N; j++)
+                    ifo[i].sig.xDat[j] = (float) tmp_xdat[j];
+               free(tmp_xdat);
+#else
                status = fread((void *)(ifo[i].sig.xDat), sizeof(float), sett->N, data);
+#endif
                fclose (data);
           } else {
                perror (ifo[i].xdatname);
