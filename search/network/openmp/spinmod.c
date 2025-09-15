@@ -499,6 +499,8 @@ void spindown_modulation(const int nifo, const int N, const FLOAT_TYPE het1,
                complex FLOAT_TYPE exph;
 
                phase = het1*i + spnd*_tmp1[n][i];
+               // full phase formula test
+               // phase += spnd * ifo[n].sig.shft[i]*ifo[n].sig.shft[i];
                sincos(phase, &sp, &cp);
                exph = cp - I*sp;
                if (n==0){
