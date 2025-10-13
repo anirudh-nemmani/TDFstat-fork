@@ -19,6 +19,7 @@
 #include "settings.h"
 #include "jobcore.h"
 #include "timer.h"
+#include "io.h"
 
 extern volatile sig_atomic_t save_state;
 
@@ -36,11 +37,13 @@ void search( Search_settings *sett,
 
      struct flock lck;
 
-     int pm;              // hemisphere
-     float mm, nn;        // sky positions
-     int sgnlc=0;         // number of candidates
-     FLOAT_TYPE *sgnlv;   // array with candidates data
-     long totsgnl;        // total number of candidates
+     int i;
+     int pm;                // hemisphere
+     float mm, nn;          // sky positions
+     int sgnlc=0;           // number of candidates
+     //FLOAT_TYPE *sgnlv;   // array with candidates data
+     Trigger *sgnlv;        // array with triggers to be saved
+     long totsgnl;          // total number of candidates
 
      char outname[1100];
      int fd, status;
@@ -49,12 +52,19 @@ void search( Search_settings *sett,
 #ifdef TIMERS
      struct timespec tstart = get_current_time(CLOCK_REALTIME), tend;
 #endif
+     // sgnlv is a buffer for triggers produced in one run of jobcore
+     // max size = <spindown range>/<spindown step>
 
-     // Allocate buffer for triggers
-     sgnlv = (FLOAT_TYPE *)calloc(NPAR*sett->bufsize, sizeof(FLOAT_TYPE));
+     int max_spindowns = (s_range->spndr[1]-s_range->spndr[0])/s_range->sstep + 1;
+     sgnlv = (Trigger *)calloc(max_spindowns, sizeof(Trigger));
 
-     // open mode for trig file
-     int tmode = O_WRONLY|O_CREAT|O_APPEND;
+     // max buffer size for (f, fstat) pairs = 2*nfft/2
+     sett->bufsize = sett->nfft;
+     // initialize ffstat
+     for (i=0; i<max_spindowns; i++) {
+          sgnlv[i].ffstat.len = 0;
+          sgnlv[i].ffstat.p = NULL;
+     }
 
      state = NULL;
      if (opts->checkp_flag) {
@@ -70,12 +80,14 @@ void search( Search_settings *sett,
 
      for (pm=s_range->pst; pm<=s_range->pmr[1]; ++pm) {
 
-          sprintf (outname, "%s/triggers_%03d_%04d%s_%d.bin",
+          sprintf (outname, "%s/triggers_%03d_%04d%s_%d.h5",
                opts->outdir, opts->seg, opts->band, opts->label, pm);
           // remove existing trigger file if checkpointing is disabled
-          if(! opts->checkp_flag) remove(outname);
+          if (! opts->checkp_flag) remove(outname);
           totsgnl = 0;
 
+          trig_h5_init(outname, opts, sett, s_range, sgnlv);
+          
           /* Two main loops over sky positions */
 
           // imm & inn allow to transform loop indices from float to int
@@ -89,87 +101,70 @@ void search( Search_settings *sett,
                for (int inn=0; inn<inn_size; ++inn) {
                     nn = s_range->nst + inn*s_range->nstep;
 
+                    int fnum_old = *FNum;  // number of records already written to file
+                    
                     /* Loop over spindowns is inside job_core() */
                     status = job_core(
                          pm,           // hemisphere
                          mm,           // grid 'sky position'
                          nn,           // other grid 'sky position'
                          sett,         // search settings
-                         opts,         // cmd opts
-                         s_range,      // range for searching
+                         opts,         // code config options
+                         s_range,      // search ranges
                          plans,        // fftw plans
                          fftw_arr,     // arrays for fftw
                          aux,          // auxiliary arrays
                          &sgnlc,       // current number of candidates
-                         sgnlv,        // candidate array
-                         FNum);        // candidate signal number
+                         sgnlv,        // triggers buffer
+                         FNum);        // number of F-statistic evaluations (=n_spindowns)
 
                     // Get back to regular spin-down range
                     s_range->sst = s_range->spndr[0];
 
-                    /* Add trigger parameters to a file */
-                    // if enough signals found (no. of signals > half length of buffer)
-                    if (sgnlc > sett->bufsize/2 || save_state == 1) {
-                         if((fd = open (outname, tmode, S_IRUSR|S_IWUSR|S_IRGRP)) < 0) {
-                              perror(outname);
-                              return;
+                    totsgnl += sgnlc;
+                    // Write triggers buffer to the file if not empty
+                    int nrec = *FNum - fnum_old;
+                    if (nrec>0) {
+                         printf("Writing [m=%g   n=%g]  nrec=%d\n", mm, nn, nrec);
+                         trig_h5_extend(outname, sgnlv, nrec);
+                    }
+                    
+                    sgnlc=0;
+                    
+                    if(opts->checkp_flag) {
+                         ftruncate(fileno(state), 0);
+                         fprintf(state, "%d %f %f %f %d\n", pm, mm, nn+1, s_range->sst, *FNum);
+                         fseek(state, 0, SEEK_SET);
+                         if (save_state == 1) {
+                              //printf("%d %d %d %d %d\n", pm, mm, nn+1, s_range->sst, *FNum);
+                              printf("\nState saved after signal\nExiting\n");
+                              exit(EXIT_SUCCESS);
                          }
-#ifdef USE_LOCKING
-              	          lck.l_type = F_WRLCK;
-                         lck.l_whence = 0;
-                         lck.l_start = 0L;
-                         lck.l_len = 0L;
-                         if (fcntl (fd, F_SETLKW, &lck) < 0) perror ("fcntl()");
-#endif
-                         write(fd, (void *)(sgnlv), sgnlc*NPAR*sizeof(FLOAT_TYPE));
-                         totsgnl += sgnlc;
-                         if (close(fd) < 0) perror ("close()");
-                         sgnlc=0;
-
-                         if(opts->checkp_flag) {
-                              ftruncate(fileno(state), 0);
-                              fprintf(state, "%d %f %f %f %d\n", pm, mm, nn+1, s_range->sst, *FNum);
-                              fseek(state, 0, SEEK_SET);
-                              if (save_state == 1) {
-                                   //printf("%d %d %d %d %d\n", pm, mm, nn+1, s_range->sst, *FNum);
-                                   printf("\nState saved after signal\nExiting\n");
-                                   exit(EXIT_SUCCESS);
-                              }
-                         }
-                         save_state = 0;
-                    } /* if sgnlc > sett-nfft */
+                    }
+                    save_state = 0;
+                    //} /* if sgnlc > sett-nfft */
                } // for nn
                s_range->nst = s_range->nr[0];
           } // for mm
           s_range->mst = s_range->mr[0];
 
-          // Write the leftover from the last iteration of the buffer
-          if((fd = open(outname, tmode, S_IRUSR|S_IWUSR|S_IRGRP)) < 0) {
-               perror(outname);
-               return;
-          }
-
-#ifdef USE_LOCKING
-          lck.l_type = F_WRLCK;
-          lck.l_whence = 0;
-          lck.l_start = 0L;
-          lck.l_len = 0L;
-          if (fcntl (fd, F_SETLKW, &lck) < 0) perror ("fcntl()");
-#endif
-          write(fd, (void *)(sgnlv), sgnlc*NPAR*sizeof(FLOAT_TYPE));
+          // All triggers should be written at this point
+               
           totsgnl += sgnlc;
           printf("\n### Total number of signals in %s = %ld\n\n", outname, totsgnl);
-          if (close(fd) < 0) perror ("close()");
           sgnlc=0;
      } // for pm
 
-     if(opts->checkp_flag) {
+     if (opts->checkp_flag) {
           // empty state file to prevent restart after successful end
           ftruncate(fileno(state), 0);
           fclose(state);
      }
 
      // Free triggers buffer
+     for(i=0; i<max_spindowns; i++) {
+          if (sgnlv[i].ffstat.p) free(sgnlv[i].ffstat.p);
+     }
      free(sgnlv);
 
 #ifdef TIMERS
@@ -196,7 +191,7 @@ int job_core(
                FFTW_arrays *fftw_arr,    // Arrays for fftw
                Aux_arrays *aux,          // Auxiliary arrays
                int *sgnlc,               // Candidate trigger parameters
-               FLOAT_TYPE *sgnlv,        // Candidate array
+               Trigger *sgnlv,           // Candidate array
                int *FNum)                // Candidate signal number
 {
      int i, j, n;
@@ -409,12 +404,7 @@ int job_core(
      static FLOAT_TYPE *F;
      if (!F) F = (FLOAT_TYPE *)malloc(2*sett->nfft*sizeof(FLOAT_TYPE));
 
-     //private loop counter: ss
-     //private (declared inside): ii,Fc,het1,k,veto_status,a,v,_p,_c,_s,status
-     //shared default: nn,mm,sett,_tmp1,ifo,het0,bnd,plans,opts,aa,bb,
-     //                fftw_arr (zostawiamy i robimy nowe), FNum (atomic!)
      //we use shared plans and  fftw_execute with 'new-array' interface
-
 
      /* Spindown loop  */
 
@@ -431,6 +421,23 @@ int job_core(
           // Spindown parameter
           //FLOAT_TYPE spnd = ss*sett->M[5] + nn*sett->M[9] + mm*sett->M[13];
           sgnlt[1] = ss*sett->M[5] + nn*sett->M[9] + mm*sett->M[13];
+
+          // initialize current record for triggers
+          sgnlv[iss].m = mm;
+          sgnlv[iss].n = nn;
+          sgnlv[iss].s = ss;
+          sgnlv[iss].ra = sgnlt[3];
+          sgnlv[iss].dec = sgnlt[2];
+          sgnlv[iss].fdot = sgnlt[1]/(M_PI*sett->dt*sett->dt);
+          sgnlv[iss].ffstat.len = 0;
+          // allocate memory for ffstat buffer if not allocated yet
+          if (sgnlv[iss].ffstat.p == NULL) {
+               sgnlv[iss].ffstat.p = (float *) malloc(sett->bufsize * sizeof(float));
+               if (sgnlv[iss].ffstat.p == NULL) {
+                    printf("[ERROR] Cannot allocate memory for triggers buffer of size %d\n", sett->bufsize);
+                    exit(EXIT_FAILURE);
+               }
+          }
 
           FLOAT_TYPE het1;
 
@@ -477,7 +484,7 @@ int job_core(
                for (i=0; i<(sett->nmax-sett->nmin); i++)
                     fprintf(f1, "%d   %lf   %lf  %lf  %lf  %lf %lf\n", i, fraw[i],
                          2.*M_PI*i/((double) sett->fftpad*sett->nfft) + sgnl0,
-                         sqr(creal( ifo[0].sig.xDatma[2*i] )),
+                         sqr(creal(ifo[0].sig.xDatma[2*i])),
                          sqr(cimag(ifo[0].sig.xDatmb[2*i])),
                          sqr(creal(ifo[1].sig.xDatma[2*i])),
                          sqr(cimag(ifo[1].sig.xDatmb[2*i])) );
@@ -492,6 +499,7 @@ int job_core(
           }
 
           /* select triggers */
+          int itrig=0;
 #if 0
           int dd = sett->dd;
           /* find the highest maximum (above trl) in each block of length dd;
@@ -524,7 +532,7 @@ int job_core(
                     } // if F[i]
                } // while i
 #endif
-               // Candidate signal frequency
+               // Candidate signal frequency ( ~ ii/nmax * pi ; nmax=nfftf/2 )
                sgnlt[0] = (FLOAT_TYPE)(2*ii)/(FLOAT_TYPE)sett->nfftf * M_PI + sgnl0;
 
                // Checking if signal is within a known instrumental line
@@ -538,21 +546,18 @@ int job_core(
 
                if(!veto_status) {
 
-                    if ( *sgnlc >= sett->bufsize ) {
-                         printf("[ERROR] Triggers buffer size is too small ! sgnlc=%d\n", *sgnlc);
-                         exit(EXIT_FAILURE);
-                    }
-                    // SNR ; sqrtf precission is suffiecient
-                    sgnlt[4] = sqrtf(2.*(Fc - sett->nd));
+                    //sgnlt[4] = sqrtf(2.*(Fc - sett->nd));
+                    // we store fstatistics value instead of snr
+                    sgnlt[4] = Fc;
 
                     // Add new parameters to the output buffer array
-                    for (j=0; j<NPAR; ++j)
-                         sgnlv[NPAR*(*sgnlc)+j] = sgnlt[j];
-
+                    ((float *)(sgnlv[iss].ffstat.p))[2*itrig] = sgnlt[0];    // frequency
+                    sgnlv[iss].ffstat.len += 2;
+                    itrig++;
                     (*sgnlc)++;
 
 #ifdef VERBOSE
-                    printf ("\nSignal %d: %d %f %f %f %d snr=%.2f\n",
+                    printf ("\nSignal %d: %d %g %g %g %d snr=%.2f\n",
                          *sgnlc, pm, mm, nn, ss, ii, sgnlt[4]);
 #endif
                } // if veto_status
@@ -567,7 +572,7 @@ int job_core(
 #endif
 
      } // for ss
-
+//exit(0);
 #ifndef VERBOSE
      printf("Number of signals found: %d (buffer %d%% full)\n", *sgnlc, (*sgnlc)*100/(sett->bufsize/2) );
 #endif

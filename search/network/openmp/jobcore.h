@@ -29,7 +29,7 @@ int job_core(
      	     FFTW_arrays *fftw_arr,    // arrays for fftw
      	     Aux_arrays *aux,          // auxiliary arrays
      	     int *sgnlc,               // current number of candidates
-     	     FLOAT_TYPE *sgnlv,        // candidate array
+     	     Trigger *sgnlv,        // candidate array
      	     int *FNum);               // candidate signal number
 
 

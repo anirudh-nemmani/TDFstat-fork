@@ -60,9 +60,13 @@ void search_settings(Search_settings* sett)
      sett->Smax=Smax;    	// maximum spindown
      sett->nd=nd;        	// degrees of freedom
      sett->interpftpad=interpftpad;
-     sett->bufsize=4*sett->nfft; // buffer size for triggers = 2 * F_size
+     // buffer size for triggers = 2 * F_size (if whole F is saved)
+     // 2 because it can't be filled >50%
+     // multiplication factor of the minimal buffer size
+     //sett->buf_scale = 1.;
 
      sett->Ninterp = sett->interpftpad*sett->nfft;
+     // fftpad is taken from the grid file, usually = 1
      sett->nfftf = sett->fftpad*sett->nfft;
 
      // Because of frequency-domain filters, we search
@@ -132,7 +136,7 @@ void detectors_settings( Search_settings* sett, Command_line_opts *opts)
                dp = opendir(dirname);
                if (dp) {
                     closedir(dp);
-#if SCI_RUN==O3
+#if SCI_RUN == O3
                     sprintf(x, "%s/xdatsc_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);
 #else
                     sprintf(x, "%s/xdat_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);

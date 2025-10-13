@@ -3,6 +3,7 @@
 
 #include <fftw3.h>
 #include <complex.h>
+#include <hdf5.h>
 
 #define MAX_DETECTORS 8        // Maximum number of detectors in network
 #define DETNAME_LENGTH 2       // Detector name length (H1, L1, V1...)
@@ -17,7 +18,7 @@
 typedef struct _comm_line_opts {
 
      int checkp_flag, veto_flag, gen_vlines_flag, help_flag;
-     int fftinterp;
+     //int fftinterp;
      int seg, band, hemi, nod;
      double thr;
      double fpo_val, narrowdown, overlap;
@@ -105,27 +106,27 @@ typedef struct _search_settings {
             dt,     // Sampling time
             B,      // Bandwidth
             oms,    // Dimensionless angular frequency (fpo)
-            omr,    // C_OMEGA_R * dt
-                    // (dimensionless Earth's angular frequency)
+            omr,    // C_OMEGA_R * dt (dimensionless Earth's angular frequency)
             Smin,   // Minimum spindown
             Smax,   // Maximum spindown
             sepsm,	// sin(epsm)
             cepsm;	// cos(epsm)
 
-     int nfft,       // length of fft
-         nod,        // number of days of observation
-         N,          // number of data points
-         nfftf,      // nfft * fftpad
-         nmax,	      // first and last point
-         nmin, 	 // of Fstat
-         s,          // number of spindowns
-         nd,         // degrees of freedom
+     int nfft,         // length of fft
+         nod,          // number of days of observation
+         N,            // number of data points
+         nfftf,        // nfft * fftpad
+         nmax,	        // first and last point
+         nmin, 	   // of Fstat
+         s,            // number of spindowns
+         nd,           // degrees of freedom
          interpftpad,
-         fftpad,     // zero padding
-         Ninterp, 	 // for resampling (set in plan_fftw() init.c)
-         nifo,       // number of detectors
-         bufsize,    // buffer size for triggers
-         dd;         // searching for F maxima (triggers) in blocks of dd size
+         fftpad,       // zero padding
+         Ninterp, 	   // for resampling (set in plan_fftw() init.c)
+         nifo,         // number of detectors
+         numlines_band,// number of lines in band
+         bufsize,      // size of buffer for ffstat pairs
+         dd;           // block size for Fstat maxima search
 
      double *M;           // Grid-generating matrix (or Fisher matrix,
                           // in case of coincidences)
@@ -137,7 +138,6 @@ typedef struct _search_settings {
                            // sett->vedva[i][j]  = eigvec[i][j]*sqrt(eigval[j])
 
      double lines[MAXL][2]; // Array for lines in given band
-     int numlines_band;     // number of lines in band
 
 } Search_settings;
 
@@ -202,5 +202,11 @@ typedef struct _triggers {
      int frcount, goodcands;
 
 } Candidate_triggers;
+
+typedef struct _trigger {
+          float  m, n, s;
+          float  ra, dec, fdot;
+          hvl_t  ffstat;
+} Trigger;
 
 #endif

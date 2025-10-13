@@ -14,7 +14,7 @@ PREC = FLOAT
 # Modifications specific to the science run. Currently implemented values:
 # O3 - double input data, input filenames start with "xdatsc_",
 # anything else - no modifications except of executable filename
-SCI_RUN = O3
+SCI_RUN = O4
 
 #FFTW_DIR = $(CONDA_PREFIX)
 FFTW_DIR = /opt/fftw/3.3.10-gcc11-mvapich2/
@@ -66,7 +66,7 @@ LDFLAGS = -L$(FFTW_DIR)/lib ${VLDFLAGS} -L$(INIPARSER_DIR)
 LDLIBS = -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2 \
 	 -static -lfftw3 -lfftw3_omp $(FFTW_FLOAT_LIBS) ${VLIBS} \
 	 -lgsl -lgslcblas -liniparser \
-	 -Wl,-Bdynamic -lc -lm -lrt
+	 -Wl,-Bdynamic -lc -lm -lrt -lhdf5
 
 
 
@@ -77,8 +77,8 @@ veclib:
 	@echo -e "\nUsing prebuild SLEEF library from: $(SPATH)\n"
 endif
 
-SRC = main.c jobcore.c auxi.c settings.c init.c  timer.c spinmod.c
-INC = jobcore.h settings.h auxi.h timer.h init.h struct.h
+SRC = main.c jobcore.c auxi.c settings.c init.c  timer.c spinmod.c io.c
+INC = jobcore.h settings.h auxi.h timer.h init.h struct.h io.h
 DEPS = $(SRC) $(INC) Makefile
 
 $(TARGET): $(DEPS)
