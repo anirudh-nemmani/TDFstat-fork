@@ -9,11 +9,12 @@
 #define TRIG_D_NAME   "triggers"
 #define RANK          1
 
-int trig_h5_init (char *outname, Command_line_opts *opts, Search_settings *sett, 
+int hdfout_init (char *outname, Command_line_opts *opts, Search_settings *sett, 
      Search_range *s_range, Trigger *sgnlv)
 {
      int        i, j;
      hid_t      file, t_dataset, t_space, t_prop, filespace, memspace, space_scalar;
+     hsize_t    dims[2] = {0,0};
      hsize_t    t_dim[RANK] = {0};
      hsize_t    t_maxdim[RANK] = {H5S_UNLIMITED};
      herr_t     status;
@@ -61,11 +62,7 @@ int trig_h5_init (char *outname, Command_line_opts *opts, Search_settings *sett,
      //H5Tinsert(cmd_opts_tid, "state_file", HOFFSET(Command_line_opts, state_file), H5T_C_S1);
 
      // Search settings data type  (sett)
-     
-     printf("sett size=%d\n", sizeof(Search_settings)-sizeof(sett->lines)+
-          sett->numlines_band*2*sizeof(double));
-     hid_t sett_tid = H5Tcreate (H5T_COMPOUND, sizeof(Search_settings)-sizeof(sett->lines)+
-          sett->numlines_band*2*sizeof(double));
+     hid_t sett_tid = H5Tcreate (H5T_COMPOUND, sizeof(Search_settings));
      H5Tinsert(sett_tid, "fpo", HOFFSET(Search_settings, fpo), H5T_NATIVE_DOUBLE);
      H5Tinsert(sett_tid, "dt", HOFFSET(Search_settings, dt), H5T_NATIVE_DOUBLE);
      H5Tinsert(sett_tid, "B", HOFFSET(Search_settings, B), H5T_NATIVE_DOUBLE);
@@ -88,15 +85,20 @@ int trig_h5_init (char *outname, Command_line_opts *opts, Search_settings *sett,
      H5Tinsert(sett_tid, "Ninterp", HOFFSET(Search_settings, Ninterp), H5T_NATIVE_INT);
      H5Tinsert(sett_tid, "nifo", HOFFSET(Search_settings, nifo), H5T_NATIVE_INT);
      H5Tinsert(sett_tid, "numlines_band", HOFFSET(Search_settings, numlines_band), H5T_NATIVE_INT);
+     H5Tinsert(sett_tid, "nvlines_all_inband", HOFFSET(Search_settings, nvlines_all_inband), H5T_NATIVE_INT);     
      H5Tinsert(sett_tid, "bufsize", HOFFSET(Search_settings, bufsize), H5T_NATIVE_INT);
      H5Tinsert(sett_tid, "dd", HOFFSET(Search_settings, dd), H5T_NATIVE_INT);
-     hsize_t dims[2] = {sett->numlines_band, 2};
-     hid_t lines_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 2, dims);
+     
+     hsize_t dims1d[1] = {16};
+     hid_t M_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 1, dims1d);
+     H5Tinsert(sett_tid, "M", HOFFSET(Search_settings, M), M_t);
+     
+     hsize_t dims2d[2] = {sett->nvlines_all_inband, 2};
+     hid_t lines_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 2, dims2d);
      H5Tinsert(sett_tid, "lines", HOFFSET(Search_settings, lines), lines_t);
      
      // ------------------------------------------------------------------------
 
-     
      //Create the file.
      file = H5Fcreate(outname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
      
@@ -135,7 +137,8 @@ int trig_h5_init (char *outname, Command_line_opts *opts, Search_settings *sett,
 
 
 
-int trig_h5_extend(char *outname, Trigger *sgnlv, int sgnlv_size){
+int hdfout_extend(char *outname, Trigger *sgnlv, int sgnlv_size)
+{
      
      // Extend the triggers dataset by sgnlv_size entries from sgnlv bffer
      // Assume the file is already created and contains dataset "triggers"
@@ -198,5 +201,20 @@ int trig_h5_extend(char *outname, Trigger *sgnlv, int sgnlv_size){
      H5Dclose(t_dataset);
      H5Fclose(file);
      
-     return(1);
+     return(EXIT_SUCCESS);
+}
+
+
+
+int hdfout_finalize(char *outname, int totsgnl, double time_elapsed, int nthreads)
+{
+     
+     //printf("\n[hdfout] walltime = %e s | ncpus = %d | cputime = %e\n",
+     //     time_elapsed, nthreads, time_elapsed*nthreads);
+
+     // write end datetime
+     // totsgnl
+     // num_threads , cputime, walltime
+     //
+     return(EXIT_SUCCESS);
 }

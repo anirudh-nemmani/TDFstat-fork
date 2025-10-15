@@ -420,8 +420,8 @@ int read_lines( Search_settings *sett,	Command_line_opts *opts )
                     /*printf("%f  %d  %f  %d   %d   %f   %f   %d   %s\n",  vline[i].f, vline[i].type,
                     vline[i].offset, vline[i].iharm1, vline[i].iharm2, vline[i].lwidth,
                     vline[i].rwidth, vline[i].nline, vline[i].vfile); */
-                    if (++i > MAXL-1) {
-                         printf("Too many lines in file %s, increase MAXL!\n", lfile);
+                    if (++i > MAXVFILEL-1) {
+                         printf("Too many lines in file %s, increase MAXVFILEL!\n", lfile);
                          exit(EXIT_FAILURE);
                     }
                }
@@ -534,8 +534,10 @@ int read_lines( Search_settings *sett,	Command_line_opts *opts )
           exit(EXIT_FAILURE);
      }
 
+     sett->nvlines_all_inband = j;
+     
      // scale veto lines to radians (narrowdown lines are already scaled)
-     for (i=sett->numlines_band; i<j; i++) {
+     for (i=sett->numlines_band; i<sett->nvlines_all_inband; i++) {
           fl = sett->lines[i][0];
           fr = sett->lines[i][1];
           sett->lines[i][0] = (sett->lines[i][0] - sett->fpo)/(sett->B)*M_PI;
@@ -550,12 +552,12 @@ int read_lines( Search_settings *sett,	Command_line_opts *opts )
      fclose(data);
      printf("Wrote veto lines in band to: %s\n", linefile);
 
-     lines_veto_fraction(sett, sett->numlines_band, j, opts->veto_flag);
+     lines_veto_fraction(sett, sett->numlines_band, sett->nvlines_all_inband, opts->veto_flag);
 
      // set number of veto lines only if veto option is given
      if (opts->veto_flag) {
           printf("Veto lines will be applied!\n");
-          sett->numlines_band = j;
+          sett->numlines_band = sett->nvlines_all_inband;
      } else {
           printf("Veto lines WILL NOT be applied!\n");
      }

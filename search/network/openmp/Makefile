@@ -14,7 +14,7 @@ PREC = FLOAT
 # Modifications specific to the science run. Currently implemented values:
 # O3 - double input data, input filenames start with "xdatsc_",
 # anything else - no modifications except of executable filename
-SCI_RUN = O4
+SCI_RUN = O3
 
 #FFTW_DIR = $(CONDA_PREFIX)
 FFTW_DIR = /opt/fftw/3.3.10-gcc11-mvapich2/

@@ -34,24 +34,20 @@ void search( Search_settings *sett,
              int *FNum )
 {
 
-
      struct flock lck;
 
      int i;
      int pm;                // hemisphere
      float mm, nn;          // sky positions
-     int sgnlc=0;           // number of candidates
+     int sgnlc=0;           // number of triggers in the buffer
      //FLOAT_TYPE *sgnlv;   // array with candidates data
-     Trigger *sgnlv;        // array with triggers to be saved
-     long totsgnl;          // total number of candidates
+     Trigger *sgnlv;        // triggers buffer (to be saved)
+     long totsgnl;          // total number of triggers found
 
      char outname[1100];
      int fd, status;
      FILE *state;
 
-#ifdef TIMERS
-     struct timespec tstart = get_current_time(CLOCK_REALTIME), tend;
-#endif
      // sgnlv is a buffer for triggers produced in one run of jobcore
      // max size = <spindown range>/<spindown step>
 
@@ -80,13 +76,15 @@ void search( Search_settings *sett,
 
      for (pm=s_range->pst; pm<=s_range->pmr[1]; ++pm) {
 
+          struct timespec tstart = get_current_time(CLOCK_REALTIME), tend;
+
           sprintf (outname, "%s/triggers_%03d_%04d%s_%d.h5",
                opts->outdir, opts->seg, opts->band, opts->label, pm);
           // remove existing trigger file if checkpointing is disabled
           if (! opts->checkp_flag) remove(outname);
           totsgnl = 0;
 
-          trig_h5_init(outname, opts, sett, s_range, sgnlv);
+          hdfout_init(outname, opts, sett, s_range, sgnlv);
           
           /* Two main loops over sky positions */
 
@@ -114,7 +112,7 @@ void search( Search_settings *sett,
                          plans,        // fftw plans
                          fftw_arr,     // arrays for fftw
                          aux,          // auxiliary arrays
-                         &sgnlc,       // current number of candidates
+                         &sgnlc,       // number of triggers in the buffer
                          sgnlv,        // triggers buffer
                          FNum);        // number of F-statistic evaluations (=n_spindowns)
 
@@ -123,10 +121,10 @@ void search( Search_settings *sett,
 
                     totsgnl += sgnlc;
                     // Write triggers buffer to the file if not empty
-                    int nrec = *FNum - fnum_old;
+                    int nrec = *FNum - fnum_old;  // number of records to write
                     if (nrec>0) {
-                         printf("Writing [m=%g   n=%g]  nrec=%d\n", mm, nn, nrec);
-                         trig_h5_extend(outname, sgnlv, nrec);
+                         //printf("Writing [m=%g   n=%g]  nrec=%d\n", mm, nn, nrec);
+                         hdfout_extend(outname, sgnlv, nrec);
                     }
                     
                     sgnlc=0;
@@ -148,11 +146,17 @@ void search( Search_settings *sett,
           } // for mm
           s_range->mst = s_range->mr[0];
 
+          tend = get_current_time(CLOCK_REALTIME);
+          double time_elapsed = get_time_difference(tstart, tend);
+          int nthreads = omp_get_max_threads();
+          printf("\nwalltime = %e s | ncpus = %d | ncpus*walltime = %e s\n",
+               time_elapsed, nthreads, time_elapsed*nthreads);
+
           // All triggers should be written at this point
-               
-          totsgnl += sgnlc;
-          printf("\n### Total number of signals in %s = %ld\n\n", outname, totsgnl);
+          printf("\n### Total number of triggers in %s = %ld\n\n", outname, totsgnl);
           sgnlc=0;
+          hdfout_finalize(outname, totsgnl, time_elapsed, nthreads);
+          
      } // for pm
 
      if (opts->checkp_flag) {
@@ -167,14 +171,8 @@ void search( Search_settings *sett,
      }
      free(sgnlv);
 
-#ifdef TIMERS
-     tend = get_current_time(CLOCK_REALTIME);
-     double time_elapsed = get_time_difference(tstart, tend);
-     printf("\nwalltime = %e s | ncpus = %d | cputime = %e\n",
-          time_elapsed, omp_get_max_threads(), time_elapsed*omp_get_max_threads());
-#endif
      printf("\nEND\n");
-
+     
 } //search
 
 
@@ -395,7 +393,7 @@ int job_core(
      }
 
      //const int s_stride = s_range->sstep;
-     printf ("\n>>%d\t%f\t%f\t[%f..%f:%f]\n", *FNum, mm, nn, smin, smax, s_range->sstep);
+     printf ("\n>>%d\t%g\t%g\t[%g..%g:%g]\n", *FNum, mm, nn, smin, smax, s_range->sstep);
 
      static FFTW_PRE(_complex) *fxa, *fxb;
      fxa = fftw_arr->fxa;
@@ -552,6 +550,7 @@ int job_core(
 
                     // Add new parameters to the output buffer array
                     ((float *)(sgnlv[iss].ffstat.p))[2*itrig] = sgnlt[0];    // frequency
+                    ((float *)(sgnlv[iss].ffstat.p))[2*itrig + 1] = sgnlt[4]; // fstat value
                     sgnlv[iss].ffstat.len += 2;
                     itrig++;
                     (*sgnlc)++;
@@ -559,6 +558,7 @@ int job_core(
 #ifdef VERBOSE
                     printf ("\nSignal %d: %d %g %g %g %d snr=%.2f\n",
                          *sgnlc, pm, mm, nn, ss, ii, sgnlt[4]);
+                    printf("aququ\n");
 #endif
                } // if veto_status
           } // for i
@@ -572,14 +572,15 @@ int job_core(
 #endif
 
      } // for ss
-//exit(0);
+
+     printf("  ntrig=%d, buffer %d%% full\n", *sgnlc, (*sgnlc)*100/(sett->bufsize/2) );
 #ifndef VERBOSE
-     printf("Number of signals found: %d (buffer %d%% full)\n", *sgnlc, (*sgnlc)*100/(sett->bufsize/2) );
+     //printf("Number of signals found: %d (buffer %d%% full)\n", *sgnlc, (*sgnlc)*100/(sett->bufsize/2) );
 #endif
 
-
 #if TIMERS>2
-     printf("\nTotal spindown loop time: %e s, mean spindown cpu-time: %e s (%d runs)\n",
+     //printf("\nTotal spindown loop time: %e s, mean spindown cpu-time: %e s (%d runs)\n",
+     printf("  [Perf] Spindown loop cputime: %e s, <cputime/ns>: %e s (ns: %d)\n",          
           spindown_timer, spindown_timer/spindown_counter, spindown_counter);
 #endif
 

@@ -11,7 +11,7 @@
 #define INICANDSIZE 1048576    // Initial size for array candidates storage;
                                // realloc called if needed (in coincidences)
 
-#define MAXL 8192              // Max number of veto lines in band
+#define MAXL 512               // Max number of veto lines in band
 #define MAXVFILEL 8192         // Max number of text lines in the veto file
 
 /* Command line options for search */
@@ -125,10 +125,11 @@ typedef struct _search_settings {
          Ninterp, 	   // for resampling (set in plan_fftw() init.c)
          nifo,         // number of detectors
          numlines_band,// number of lines in band
+         nvlines_all_inband, // number of all veto lines in band
          bufsize,      // size of buffer for ffstat pairs
          dd;           // block size for Fstat maxima search
 
-     double *M;           // Grid-generating matrix (or Fisher matrix,
+     double M[16];           // Grid-generating matrix (or Fisher matrix,
                           // in case of coincidences)
      double invM[4][4];   // Inverse of M
 

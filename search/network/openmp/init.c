@@ -136,7 +136,7 @@ void read_ini_file( Search_settings *sett,
 void read_grid( Search_settings *sett, Command_line_opts *opts )
 {
 
-     sett->M = (double *) calloc (16, sizeof (double));
+     //sett->M = (double *) calloc (16, sizeof (double));
 
      FILE *data;
      char filename[FNAME_LENGTH];
@@ -869,7 +869,7 @@ void cleanup( Search_settings *sett,
      fftw_free(fftw_arr->xa);
      fftw_free(fftw_arr->xb);
 
-     free(sett->M);
+     //free(sett->M);
 
      FFTW_PRE(_destroy_plan)(plans->plan);
      fftw_destroy_plan(plans->pl_int);
@@ -1104,7 +1104,7 @@ void manage_grid_matrix( Search_settings *sett, char *gridfile )
 
      FILE *data;
 
-     sett->M = (double *)calloc(16, sizeof (double));
+     //sett->M = (double *)calloc(16, sizeof (double));
 
      if ((data=fopen(gridfile, "r")) != NULL) {
           printf("Reading grid file: %s\n", gridfile);
