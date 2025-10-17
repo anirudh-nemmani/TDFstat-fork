@@ -23,7 +23,7 @@ typedef struct _comm_line_opts {
      double thr;
      double fpo_val, narrowdown, overlap;
      const char *indir, *outdir, *range_file, *grid_file, *dump_range_file,
-          *usedet, *addsig, *fstat_norm, *label;
+          *usedet, *addsig, *fstat_norm, *label, *mods;
      char state_file[FNAME_LENGTH];
 
 } Command_line_opts;

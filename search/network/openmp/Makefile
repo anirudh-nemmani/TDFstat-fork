@@ -11,11 +11,6 @@ SIMD = AVX2
 # PREC = [FLOAT, DOUBLE] precission used in the spindown loop and for output
 PREC = FLOAT
 
-# Modifications specific to the science run. Currently implemented values:
-# O3 - double input data, input filenames start with "xdatsc_",
-# anything else - no modifications except of executable filename
-SCI_RUN = O3
-
 #FFTW_DIR = $(CONDA_PREFIX)
 FFTW_DIR = /opt/fftw/3.3.10-gcc11-mvapich2/
 
@@ -46,7 +41,7 @@ endif
 
 
 #TARGET = gwsearch-${ARCH}-$(shell echo $(PERF) | tr A-Z a-z)-oldtrig
-TARGET = gwsearch-${ARCH}-${SCI_RUN}-$(shell echo $(PERF) | tr A-Z a-z)
+TARGET = gwsearch-${ARCH}-$(shell echo $(PERF) | tr A-Z a-z)
 
 VER := $(shell git rev-parse HEAD)
 

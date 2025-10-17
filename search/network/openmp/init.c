@@ -88,6 +88,8 @@ void read_ini_file( Search_settings *sett,
      opts->addsig = iniparser_getstring(ini, "search:addsig", "");
      // optional label of input and output files
      opts->label = iniparser_getstring(ini, "search:label", "");
+     // runtime modifiers, supported values are: {read_O3}
+     opts->mods = iniparser_getstring(ini, "search:mods", "");
 
      // fstatistics normalization; if NULL white noise is assumed
      // currently only NULL and old blocks_avg are implemented
@@ -207,16 +209,17 @@ void init_arrays( Search_settings *sett,
           // subdirectories
 
           if((data = fopen(ifo[i].xdatname, "r")) != NULL) {
-#if SCI_RUN==O3
-               double *tmp_xdat;
-               tmp_xdat = (double *) calloc(sett->N, sizeof(double));
-               status = fread((void *)(tmp_xdat), sizeof(double), sett->N, data);
-               for (int j=0; j<sett->N; j++)
-                    ifo[i].sig.xDat[j] = (float) tmp_xdat[j];
-               free(tmp_xdat);
-#else
-               status = fread((void *)(ifo[i].sig.xDat), sizeof(float), sett->N, data);
-#endif
+               if (opts->mods && strstr(opts->mods, "read_O3") != NULL) {
+                    // "read_O3" is present in opts->mods
+                    double *tmp_xdat;
+                    tmp_xdat = (double *) calloc(sett->N, sizeof(double));
+                    status = fread((void *)(tmp_xdat), sizeof(double), sett->N, data);
+                    for (int j=0; j<sett->N; j++)
+                         ifo[i].sig.xDat[j] = (float) tmp_xdat[j];
+                    free(tmp_xdat);
+               } else {
+                    status = fread((void *)(ifo[i].sig.xDat), sizeof(float), sett->N, data);
+               }
                fclose (data);
           } else {
                perror (ifo[i].xdatname);

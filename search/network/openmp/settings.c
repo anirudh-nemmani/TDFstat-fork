@@ -136,11 +136,12 @@ void detectors_settings( Search_settings* sett, Command_line_opts *opts)
                dp = opendir(dirname);
                if (dp) {
                     closedir(dp);
-#if SCI_RUN == O3
-                    sprintf(x, "%s/xdatsc_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);
-#else
-                    sprintf(x, "%s/xdat_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);
-#endif
+                    if (opts->mods && strstr(opts->mods, "read_O3") != NULL) {
+                         // "read_O3" is present in opts->mods
+                         sprintf(x, "%s/xdatsc_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);
+                    } else {
+                         sprintf(x, "%s/xdat_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->label);
+                    }
                     data = fopen(x, "r");
                     if (data) {
                          fclose(data);
