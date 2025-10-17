@@ -2,22 +2,27 @@
 #include <H5Ipublic.h>
 #include <H5Tpublic.h>
 #include <stdlib.h>
+#include <time.h>
 #include <hdf5.h>
+#include <hdf5_hl.h>
 #include "auxi.h"
 #include "struct.h"
 
-#define TRIG_D_NAME   "triggers"
-#define RANK          1
+#define FORMAT_VERSION "1"
+#define TRIG_DSET_NAME   "triggers"
+#define TRIG_RANK          1
+
 
 int hdfout_init (char *outname, Command_line_opts *opts, Search_settings *sett, 
      Search_range *s_range, Trigger *sgnlv)
 {
-     int        i, j;
-     hid_t      file, t_dataset, t_space, t_prop, filespace, memspace, space_scalar;
-     hsize_t    dims[2] = {0,0};
-     hsize_t    t_dim[RANK] = {0};
-     hsize_t    t_maxdim[RANK] = {H5S_UNLIMITED};
-     herr_t     status;
+     int       i, j;
+     hid_t     file, t_dataset, t_space, t_prop, filespace, memspace, space_scalar;
+     hid_t     attr;
+     hsize_t   dims[2] = {0,0};
+     hsize_t   t_dim[TRIG_RANK] = {0};
+     hsize_t   t_maxdim[TRIG_RANK] = {H5S_UNLIMITED};
+     herr_t    hstat;
      
      hid_t vstr_type_id = H5Tcopy(H5T_C_S1);
      H5Tset_size(vstr_type_id, H5T_VARIABLE);
@@ -88,44 +93,67 @@ int hdfout_init (char *outname, Command_line_opts *opts, Search_settings *sett,
      H5Tinsert(sett_tid, "nvlines_all_inband", HOFFSET(Search_settings, nvlines_all_inband), H5T_NATIVE_INT);     
      H5Tinsert(sett_tid, "bufsize", HOFFSET(Search_settings, bufsize), H5T_NATIVE_INT);
      H5Tinsert(sett_tid, "dd", HOFFSET(Search_settings, dd), H5T_NATIVE_INT);
-     
-     hsize_t dims1d[1] = {16};
-     hid_t M_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 1, dims1d);
+     hid_t M_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 1, (hsize_t[]){16});
      H5Tinsert(sett_tid, "M", HOFFSET(Search_settings, M), M_t);
-     
      hsize_t dims2d[2] = {sett->nvlines_all_inband, 2};
      hid_t lines_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 2, dims2d);
      H5Tinsert(sett_tid, "lines", HOFFSET(Search_settings, lines), lines_t);
-     
+
+     // search ranges data type  (s_range)     
+     hid_t range_tid = H5Tcreate (H5T_COMPOUND, sizeof(Search_range));
+     hid_t t1d_int = H5Tarray_create2(H5T_NATIVE_INT, 1, (hsize_t[]){2});
+     hid_t t1d_float = H5Tarray_create2(H5T_NATIVE_FLOAT, 1, (hsize_t[]){2});
+     H5Tinsert(range_tid, "pmr", HOFFSET(Search_range, pmr), t1d_int);
+     H5Tinsert(range_tid, "fr", HOFFSET(Search_range, fr), t1d_int);
+     H5Tinsert(range_tid, "mr", HOFFSET(Search_range, mr), t1d_float);
+     H5Tinsert(range_tid, "nr", HOFFSET(Search_range, nr), t1d_float);
+     H5Tinsert(range_tid, "spndr", HOFFSET(Search_range, spndr), t1d_float);
+     H5Tinsert(range_tid, "mstep", HOFFSET(Search_range, mstep), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "nstep", HOFFSET(Search_range, nstep), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "sstep", HOFFSET(Search_range, sstep), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "mst", HOFFSET(Search_range, mst), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "nst", HOFFSET(Search_range, nst), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "sst", HOFFSET(Search_range, sst), H5T_NATIVE_FLOAT);
+     H5Tinsert(range_tid, "pst", HOFFSET(Search_range, pst), H5T_NATIVE_INT);
+
      // ------------------------------------------------------------------------
 
      //Create the file.
      file = H5Fcreate(outname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
      
+     // Basic attributes
+     hstat = H5LTset_attribute_string(file, "/", "format_version", FORMAT_VERSION);
+     char datetime_str[80];
+     time_t now = time(NULL);
+     struct tm *t = localtime(&now);
+     strftime(datetime_str, sizeof(datetime_str), "%Y-%m-%d %H:%M:%S", t);
+     hstat = H5LTset_attribute_string(file, "/", "t_start", datetime_str);
+          
+     // write structs as attributes
      hid_t scalar_space_id = H5Screate(H5S_SCALAR);
-     hid_t attr = H5Acreate2(file, "opts", cmd_opts_tid, scalar_space_id, H5P_DEFAULT, H5P_DEFAULT);
-     status = H5Awrite(attr, cmd_opts_tid, opts);
+     
+     attr = H5Acreate2(file, "opts", cmd_opts_tid, scalar_space_id, H5P_DEFAULT, H5P_DEFAULT);
+     hstat = H5Awrite(attr, cmd_opts_tid, opts);
      H5Aclose(attr);
      
      attr = H5Acreate2(file, "sett", sett_tid, scalar_space_id, H5P_DEFAULT, H5P_DEFAULT);
-     status = H5Awrite(attr, sett_tid, sett);
+     hstat = H5Awrite(attr, sett_tid, sett);
      H5Aclose(attr);
 
+     attr = H5Acreate2(file, "s_range", range_tid, scalar_space_id, H5P_DEFAULT, H5P_DEFAULT);
+     hstat = H5Awrite(attr, range_tid, s_range);
+     H5Aclose(attr);
+
+     // Write triggers dataset
      hsize_t chunk_dims[1] = {3};
      t_prop = H5Pcreate(H5P_DATASET_CREATE);
-     status = H5Pset_chunk(t_prop, RANK, chunk_dims);
-     
-     // Create the data space.
-     t_space = H5Screate_simple(RANK, t_dim, t_maxdim);
-     
-     // Create the dataset.
-     t_dataset = H5Dcreate2(file, TRIG_D_NAME, t_tid, t_space, H5P_DEFAULT, t_prop, H5P_DEFAULT);
-     
-     // Wtite data to the dataset;
-     status = H5Dwrite(t_dataset, t_tid, H5S_ALL, H5S_ALL, H5P_DEFAULT, sgnlv);
+     hstat = H5Pset_chunk(t_prop, TRIG_RANK, chunk_dims);
+
+     t_space = H5Screate_simple(TRIG_RANK, t_dim, t_maxdim);
+     t_dataset = H5Dcreate2(file, TRIG_DSET_NAME, t_tid, t_space, H5P_DEFAULT, t_prop, H5P_DEFAULT);
+     hstat = H5Dwrite(t_dataset, t_tid, H5S_ALL, H5S_ALL, H5P_DEFAULT, sgnlv);
      
      // Release resources
-     //H5Tclose(tr_tid);
      H5Pclose(t_prop);
      H5Dclose(t_dataset);
      H5Sclose(t_space);
@@ -146,9 +174,9 @@ int hdfout_extend(char *outname, Trigger *sgnlv, int sgnlv_size)
 
      int        i, j;
      hid_t      file, t_dataset, t_space, t_prop, filespace, memspace, space_scalar;
-     hsize_t    t_dim[RANK] = {0};
-     hsize_t    t_maxdim[RANK] = {H5S_UNLIMITED};
-     herr_t     status;
+     hsize_t    t_dim[TRIG_RANK] = {0};
+     hsize_t    t_maxdim[TRIG_RANK] = {H5S_UNLIMITED};
+     herr_t     hstat;
      
      // ------------------------------------------------------------------------
      // Define data types
@@ -170,31 +198,30 @@ int hdfout_extend(char *outname, Trigger *sgnlv, int sgnlv_size)
      file = H5Fopen(outname, H5F_ACC_RDWR, H5P_DEFAULT);
      
      // Open the dataset.
-     t_dataset = H5Dopen2(file, TRIG_D_NAME, H5P_DEFAULT);
+     t_dataset = H5Dopen2(file, TRIG_DSET_NAME, H5P_DEFAULT);
      
      // Get the dataspace.
      filespace = H5Dget_space(t_dataset);
      
      // Get the current size of the dataset.
-     status = H5Sget_simple_extent_dims(filespace, t_dim, NULL);
+     hstat = H5Sget_simple_extent_dims(filespace, t_dim, NULL);
      
      // Extend the dataset.
      t_dim[0] += sgnlv_size;
-     status = H5Dset_extent(t_dataset, t_dim);
+     hstat = H5Dset_extent(t_dataset, t_dim);
      
      // Close the old dataspace and get the new one.
-     status = H5Sclose(filespace);
+     hstat = H5Sclose(filespace);
      filespace = H5Dget_space(t_dataset);
      
      // Define hyperslab in the extended portion of the dataset.
-     hsize_t start[RANK] = {t_dim[0]-sgnlv_size};
-     hsize_t count[RANK] = {sgnlv_size};
-     status = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL);
-     memspace = H5Screate_simple(RANK, count, NULL);
-     status = H5Dwrite(t_dataset, t_tid, memspace, filespace, H5P_DEFAULT, sgnlv);
+     hsize_t start[TRIG_RANK] = {t_dim[0]-sgnlv_size};
+     hsize_t count[TRIG_RANK] = {sgnlv_size};
+     hstat = H5Sselect_hyperslab(filespace, H5S_SELECT_SET, start, NULL, count, NULL);
+     memspace = H5Screate_simple(TRIG_RANK, count, NULL);
+     hstat = H5Dwrite(t_dataset, t_tid, memspace, filespace, H5P_DEFAULT, sgnlv);
      
      // Release resources
-     //H5Tclose(tr_tid);
      H5Sclose(memspace);
      H5Sclose(filespace);
      H5Tclose(ffstat_type);
@@ -208,13 +235,23 @@ int hdfout_extend(char *outname, Trigger *sgnlv, int sgnlv_size)
 
 int hdfout_finalize(char *outname, int totsgnl, double time_elapsed, int nthreads)
 {
+     hid_t file;
+     herr_t hstat;
      
-     //printf("\n[hdfout] walltime = %e s | ncpus = %d | cputime = %e\n",
-     //     time_elapsed, nthreads, time_elapsed*nthreads);
+     //Open the file.
+     file = H5Fopen(outname, H5F_ACC_RDWR, H5P_DEFAULT);
+     
+     char datetime_str[80];
+     time_t now = time(NULL);
+     struct tm *t = localtime(&now);
+     strftime(datetime_str, sizeof(datetime_str), "%Y-%m-%d %H:%M:%S", t);
+     hstat = H5LTset_attribute_string(file, "/", "t_end", datetime_str);
+     
+     hstat = H5LTset_attribute_int(file, "/", "totsgnl", &totsgnl, 1);
+     hstat = H5LTset_attribute_double(file, "/", "walltime", &time_elapsed, 1);
+     hstat = H5LTset_attribute_int(file, "/", "num_threads", &nthreads, 1);
 
-     // write end datetime
-     // totsgnl
-     // num_threads , cputime, walltime
-     //
+     H5Fclose(file);
+
      return(EXIT_SUCCESS);
 }

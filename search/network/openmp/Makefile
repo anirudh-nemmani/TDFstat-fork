@@ -55,7 +55,7 @@ CC = gcc -std=gnu17 -static-libgcc -fopenmp #-flto
 
 # TIMERS=1 measure total time, TIMERS=3 measure spindown loop time
 # PREFIX is the default output directory
-CFLAGS = -DPREFIX="./candidates" -DCODEVER=$(VER) -DTIMERS=3 -D$(SINCOS) -UUSE_LOCKING  -DCOMP_${PREC} -DSCI_RUN=${SCI_RUN} ${VCFLAGS} #-DVERBOSE
+CFLAGS = -DPREFIX="./candidates" -DCODEVER=$(VER) -DTIMERS=1 -D$(SINCOS) -UUSE_LOCKING  -DCOMP_${PREC} -DSCI_RUN=${SCI_RUN} ${VCFLAGS} #-DVERBOSE
 CFLAGS += -I$(FFTW_DIR)/include -I$(INIPARSER_DIR)/src
 CFLAGS += -g -Wall -Wno-unused \
 	  -O3 -ffast-math  -funsafe-loop-optimizations -funroll-loops \
@@ -66,7 +66,7 @@ LDFLAGS = -L$(FFTW_DIR)/lib ${VLDFLAGS} -L$(INIPARSER_DIR)
 LDLIBS = -Wl,--dynamic-linker=/lib64/ld-linux-x86-64.so.2 \
 	 -static -lfftw3 -lfftw3_omp $(FFTW_FLOAT_LIBS) ${VLIBS} \
 	 -lgsl -lgslcblas -liniparser \
-	 -Wl,-Bdynamic -lc -lm -lrt -lhdf5
+	 -Wl,-Bdynamic -lc -lm -lrt -lhdf5 -lhdf5_hl
 
 
 
