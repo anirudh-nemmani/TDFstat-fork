@@ -96,7 +96,8 @@ int main (int argc, char* argv[])
      if(strlen(opts.addsig)) {
           // If addsig switch used, add signal from file,
           // search around this position (+- gsize)
-          add_signal(&sett, &opts, &aux_arr, &s_range);
+          add_signal(&sett, &opts, &aux_arr);
+          set_search_range(&sett, &opts, &s_range);
      } else {
           // Set search range from range file
           set_search_range(&sett, &opts, &s_range);
