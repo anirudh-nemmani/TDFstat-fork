@@ -17,7 +17,9 @@ void init_arrays(
 void add_signal(
                     Search_settings *sett,
                     Command_line_opts *opts,
-                    Aux_arrays *aux_arr);
+                    Aux_arrays *aux_arr,
+                    const char *line,
+                    int sigcount);
 
 void set_search_range(
                     Search_settings *sett,

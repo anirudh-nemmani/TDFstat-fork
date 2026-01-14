@@ -31,7 +31,8 @@ void search( Search_settings *sett,
              FFTW_plans *plans,
              FFTW_arrays *fftw_arr,
              Aux_arrays *aux,
-             int *FNum )
+             int *FNum,
+             int sigcount)
 {
 
      struct flock lck;
@@ -89,8 +90,8 @@ void search( Search_settings *sett,
 
           struct timespec tstart = get_current_time(CLOCK_REALTIME), tend;
 
-          sprintf (outname, "%s/triggers_%03d_%04d%s_%d.h5",
-               opts->outdir, opts->seg, opts->band, opts->label, pm);
+          sprintf (outname, "%s/triggers_%03d_%04d%s_%d_%d.h5",
+               opts->outdir, opts->seg, opts->band, opts->label, sigcount, pm);
           // remove existing trigger file if checkpointing is disabled
           if (! opts->checkp_flag) remove(outname);
           totsgnl = 0;

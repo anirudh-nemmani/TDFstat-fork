@@ -87,27 +87,56 @@ int main (int argc, char* argv[])
      // Amplitude modulation functions for each detector
      for(i=0; i<sett.nifo; i++)
           rogcvir(&ifo[i]);
-
-     // inject signals from file
-     if(strlen(opts.addsig)) {
-          add_signal(&sett, &opts, &aux_arr);
-     }
-
-     // establish search range (s_range)
-     set_search_range(&sett, &opts, &s_range);
-
      // FFT plans
      FFTW_plans fftw_plans;
      FFTW_arrays fftw_arr;
      plan_fftw(&sett, &opts, &fftw_plans, &fftw_arr, &aux_arr);
-
-     // Checkpointing
-     int Fnum=0;	// candidate signal number
-     read_checkpoints(&opts, &s_range, &Fnum);
-
-     // main search job
-     search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum);
-
+     
+     // Looping the search over the signals
+     if(strlen(opts.addsig)) {
+          FILE *sigfile;
+          sigfile = fopen(opts.addsig, "r");
+          if (!sigfile) exit(EXIT_FAILURE);
+          
+          int sigcount = 1;
+          
+          char line[512];
+          while (fgets(line, sizeof(line), sigfile)) {
+              // Skip comment lines and empty lines
+              if (line[0] != '#' && line[0] != '\n') {
+                  
+                    // Add signal to data
+                    add_signal(&sett, &opts, &aux_arr, line, sigcount);
+                    
+                    // establish search range (s_range)
+                    set_search_range(&sett, &opts, &s_range);
+                    
+                    // Checkpointing
+                    int Fnum=0;	// candidate signal number
+                    read_checkpoints(&opts, &s_range, &Fnum);
+                    
+                    // main search job
+                    search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, sigcount);
+                    sigcount++;
+              }
+          }
+          fclose(sigfile);
+     }
+     
+     else {
+         // No added signals, proceed with single search
+         
+         // establish search range (s_range)
+         set_search_range(&sett, &opts, &s_range);
+         
+         // Checkpointing
+         int Fnum=0;	// candidate signal number
+         read_checkpoints(&opts, &s_range, &Fnum);
+    
+         // main search job
+         search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, 0);
+     }
+     
      // Cleanup & memory free
      cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);
 

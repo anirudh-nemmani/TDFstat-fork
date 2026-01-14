@@ -33,7 +33,8 @@ typedef struct _comm_line_opts {
 /* input signal arrays */
 typedef struct _signals {
 
-     float *xDat;
+     float *xDat;          // Data used in jobcore.c
+     float *xDatOrig;      // Original data read from xdat files
      double *DetSSB;       // Ephemeris of the detector
      double *aa, *bb;      // Amplitude modulation functions
      double *shftf, *shft; // Resampling and time-shifting

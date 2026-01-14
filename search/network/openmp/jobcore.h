@@ -11,7 +11,8 @@ void search(
                FFTW_plans *plans,
                FFTW_arrays *fftw_arr,
                Aux_arrays *aux,
-               int *Fnum);
+               int *Fnum,
+               int sigcount);
 
 /* Main job function
  * The output is stored in single or double precision

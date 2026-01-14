@@ -211,7 +211,7 @@ void init_arrays( Search_settings *sett,
      for (i=0; i<sett->nifo; i++) {
 
           ifo[i].sig.xDat = (float *) calloc(sett->N, sizeof(float));
-
+          ifo[i].sig.xDatOrig = (float *) calloc(sett->N, sizeof(float));
           // Input time-domain data handling
           //
           // The file name ifo[i].xdatname is constructed
@@ -235,6 +235,9 @@ void init_arrays( Search_settings *sett,
                perror (ifo[i].xdatname);
                exit(EXIT_FAILURE);
           }
+          
+          // Keep original data
+          memcpy(ifo[i].sig.xDatOrig, ifo[i].sig.xDat, sett->N*sizeof(float));
 
           int j, Nzeros=0;
           // Checking for null values in the data
@@ -333,7 +336,9 @@ void init_arrays( Search_settings *sett,
 
 void add_signal( Search_settings *sett,
                  Command_line_opts *opts,
-                 Aux_arrays *aux_arr)
+                 Aux_arrays *aux_arr,
+                 const char *line,
+                 int sigcount)
 {
 
      int i, j, n, gsize, reffr;
@@ -349,18 +354,16 @@ void add_signal( Search_settings *sett,
      FILE *data;
 
      // Signal parameters are read
-     if ((data=fopen (opts->addsig, "r")) != NULL) {
+     if (line != NULL) {
 
-          // Fscanning for the GW amplitude h0 or signal-to-noise,
+          // Scanning for the GW amplitude h0 or signal-to-noise,
           // the grid size and the reference frame
           // (for which the signal freq. is not spun-down/up)
 
-          do {
-               fscanf (data, "%s", amporsnr);
-          } while ( strcmp(amporsnr, "amp")!=0 && strcmp(amporsnr, "snr")!=0 );
+          sscanf(line, "%3s", amporsnr);
 
           if(!strcmp(amporsnr, "amp")) {
-              fscanf (data, "%le %d %le %le %le %le %le %le %le",
+              sscanf(line, "%*s %le %d %le %le %le %le %le %le %le",
                          &h0, &reffr,
                          &sgnlo[0], &sgnlo[1], &sgnlo[2], &sgnlo[3],
                          &sgnlo[4], &sgnlo[5], &sgnlo[6]);
@@ -375,7 +378,7 @@ void add_signal( Search_settings *sett,
                      "   Phase [rad]            : %le\n",
                      h0, reffr, sgnlo[0], sgnlo[1], sgnlo[2], sgnlo[3], sgnlo[4], sgnlo[5], sgnlo[6]);
           } else if(!strcmp(amporsnr, "snr")) {
-              fscanf (data, "%le %d %le %le %le %le %le %le %le",
+              sscanf(line, "%le %d %le %le %le %le %le %le %le",
                          &snr, &reffr,
                          &sgnlo[0], &sgnlo[1], &sgnlo[2], &sgnlo[3],
                          &sgnlo[4], &sgnlo[5], &sgnlo[6]);
@@ -390,17 +393,20 @@ void add_signal( Search_settings *sett,
                      "   Phase [rad]            : %le\n",
                      snr, reffr, sgnlo[0], sgnlo[1], sgnlo[2], sgnlo[3], sgnlo[4], sgnlo[5], sgnlo[6]);
           } else {
-              printf("Problem with the signal file. Exiting...\n");
+              printf("Problem with the signal data at the signal inedex %d. Exiting...\n", sigcount);
               exit(0);
           }
+<<<<<<< HEAD
           fclose (data);
+=======
+>>>>>>> e2594b7 (WIP: Multiple injection)
 
      } else {
           perror (opts->addsig);
      }
 
-     aux_arr->injection[0] = 1;        // number of the injection
-     aux_arr->injection[1] = reffr;    // reference band
+     aux_arr->injection[0] = (double)sigcount;        // number of the injection
+     aux_arr->injection[1] = reffr;                   // reference band
      for (i=0; i<7; i++) {
             aux_arr->injection[i+3] = sgnlo[i];
      }   // signal parameters assignment into the injection array
@@ -492,7 +498,7 @@ void add_signal( Search_settings *sett,
           for (i=0; i<sett->N; i++) {
                // Adding the signal to the data vector
                if (ifo[n].sig.xDat[i])
-                    ifo[n].sig.xDat[i] += h0*signadd[n][i];
+                   ifo[n].sig.xDat[i] = ifo[n].sig.xDatOrig[i] + h0*signadd[n][i];
           } // data loop
      } // detector loop
 
