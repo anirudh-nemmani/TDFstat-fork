@@ -90,7 +90,7 @@ void search( Search_settings *sett,
 
           struct timespec tstart = get_current_time(CLOCK_REALTIME), tend;
 
-          sprintf (outname, "%s/triggers_%03d_%04d%s_%d.h5",
+          sprintf (outname, "%s/triggers_%03d_%04d_%s_%d.h5",
                opts->outdir, opts->seg, opts->band, opts->label, pm);
           // remove existing trigger file if checkpointing is disabled
           if (! opts->checkp_flag) remove(outname);
