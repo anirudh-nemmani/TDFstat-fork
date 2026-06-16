@@ -27,6 +27,7 @@ typedef struct _comm_line_opts {
           *gtype, *gcenter, *gsizes, *gsteps;
      char state_file[FNAME_LENGTH];
      const char *xDatlabel;
+     const char *sig_corr;
 
 } Command_line_opts;
 

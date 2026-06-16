@@ -100,6 +100,8 @@ void read_ini_file( Search_settings *sett,
          opts->xDatlabel = malloc(strlen(tmp) + 2);
          sprintf((char*)opts->xDatlabel, "_%s", tmp);
      }
+     // optional correction label for signal
+     opts->sig_corr = iniparser_getstring(ini, "search:sig_corr", "");
      // runtime modifiers, supported values are: {read_O3}
      opts->mods = iniparser_getstring(ini, "search:mods", "");
 
@@ -444,8 +446,13 @@ void add_signal( Search_settings *sett,
      double sinalpha, cosalpha, sindelta, cosdelta, phaseadd, shiftadd;
      double phi, psi, cosi, cosip, iota, amplit[4];
      double nSource[3], freqo[2];
+     float *corr_ampr, *corr_phase;
 
-     char amporsnr[4];
+     char amporsnr[4], filename[562];
+
+     size_t status;
+     
+     FILE *data;
           
      // Setting the reference frame
      reffr = sgnl_params->reffr;
@@ -494,11 +501,50 @@ void add_signal( Search_settings *sett,
      // Loop for each detector - sum calculations
      for (n=0; n<sett->nifo; n++) {
 
+          // Initialising temporary arrays
+          corr_ampr = (float *) calloc(sett->N, sizeof(float));
+          corr_phase = (float *) calloc(sett->N, sizeof(float));
+
           modvir(sinalpha, cosalpha, sindelta, cosdelta, sett->N, &ifo[n], aux_arr);
 
           nSource[0] = cosalpha*cosdelta;
           nSource[1] = sinalpha*cosdelta;
           nSource[2] = sindelta;
+
+          if (strlen(opts->sig_corr)) {
+               // Reading the corrections
+               sprintf(filename, "%s/%03d/%s/%s_%03d_%04d.bin", opts->indir, opts->seg, ifo[n].name, opts->sig_corr,
+                    opts->seg, opts->band);
+               printf("add_signal(): reading signal corrections from %s\n", filename);
+               
+               if((data = fopen(filename, "r")) != NULL) {
+                    if (opts->mods && strstr(opts->mods, "read_O3") != NULL) {
+                         // "read_O3" is present in opts->mods
+                         double *tmp;
+                         tmp = (double *) calloc(2*sett->N, sizeof(double));
+                         status = fread((void *)(tmp), sizeof(double), 2*sett->N, data);
+                         for (int j=0; j<sett->N; j++) {
+                              corr_ampr[j] = (float) tmp[2*j];
+                              corr_phase[j] = (float) tmp[2*j+1];
+                         }
+                         free(tmp);
+                    } else {
+                         float *tmp;
+                         tmp = (float *) calloc(2*sett->N, sizeof(float));
+                         status = fread((void *)(tmp), sizeof(float), 2*sett->N, data);
+                         for (int j=0; j<sett->N; j++) {
+                              corr_ampr[j] = tmp[2*j];
+                              corr_phase[j] = tmp[2*j+1];
+                         }
+                         free(tmp);
+                    }
+                    fclose (data);
+               } else {
+                    perror (filename);
+                    exit(EXIT_FAILURE);
+               }
+               
+          }
 
           for (i=0; i<sett->N; i++) {
 
@@ -514,16 +560,28 @@ void add_signal( Search_settings *sett,
                // We now dephase this to shift the signal within the bandwidth
                phaseadd -= 2*M_PI*sett->dt*sett->fpo*i;
 
+               if (strlen(opts->sig_corr)) {
+                    // Apply the corrections to the phase
+                    phaseadd += corr_phase[i];
+               }
+
                // The whole signal with 4 amplitudes and modulations
                signadd[n][i] = amplit[0]*(ifo[n].sig.aa[i])*cos(phaseadd)
                              + amplit[1]*(ifo[n].sig.bb[i])*cos(phaseadd)
                              + amplit[2]*(ifo[n].sig.aa[i])*sin(phaseadd)
                              + amplit[3]*(ifo[n].sig.bb[i])*sin(phaseadd);
 
+               if (strlen(opts->sig_corr)) {
+                    // Apply the corrections to the amplitude
+                    signadd[n][i] *= corr_ampr[i];
+               }
+
                // Sum over signals
                sum += pow(signadd[n][i], 2.);
 
           } // data loop
+          free(corr_ampr);
+          free(corr_phase);
      } // detector loop
 
      // Signal amplitude h0 from the snr
