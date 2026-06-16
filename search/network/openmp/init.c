@@ -93,6 +93,13 @@ void read_ini_file( Search_settings *sett,
          opts->label = malloc(strlen(tmp) + 2);
          sprintf((char*)opts->label, "_%s", tmp);
      }
+     // optional label of input files
+     opts->xDatlabel = iniparser_getstring(ini, "search:xDatlabel", "");
+     if (strlen(opts->xDatlabel)) {
+         const char *tmp = opts->xDatlabel;
+         opts->xDatlabel = malloc(strlen(tmp) + 2);
+         sprintf((char*)opts->xDatlabel, "_%s", tmp);
+     }
      // runtime modifiers, supported values are: {read_O3}
      opts->mods = iniparser_getstring(ini, "search:mods", "");
 

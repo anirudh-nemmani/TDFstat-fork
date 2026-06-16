@@ -138,9 +138,9 @@ void detectors_settings( Search_settings* sett, Command_line_opts *opts)
                     closedir(dp);
                     if (opts->mods && strstr(opts->mods, "read_O3") != NULL) {
                          // "read_O3" is present in opts->mods
-                         sprintf(x, "%s/xdatsc_%03d_%04d.bin", dirname, opts->seg, opts->band);
+                         sprintf(x, "%s/xdatsc_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->xDatlabel);
                     } else {
-                         sprintf(x, "%s/xdat_%03d_%04d.bin", dirname, opts->seg, opts->band);
+                         sprintf(x, "%s/xdat_%03d_%04d%s.bin", dirname, opts->seg, opts->band, opts->xDatlabel);
                     }
                     data = fopen(x, "r");
                     if (data) {

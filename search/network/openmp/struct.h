@@ -26,6 +26,7 @@ typedef struct _comm_line_opts {
           *usedet, *addsig, *fstat_norm, *label, *mods,
           *gtype, *gcenter, *gsizes, *gsteps;
      char state_file[FNAME_LENGTH];
+     const char *xDatlabel;
 
 } Command_line_opts;
 
@@ -166,7 +167,7 @@ typedef struct _detector {
      Signals sig;
 
      double start_time;  // Start time of the detector
-     
+
 } Detector_settings;
 
 /* Global array of detectors (network) */
