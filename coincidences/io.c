@@ -243,7 +243,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
                 fprintf(stderr, "Error: 'opts' attribute in %s does not match expected values\n", filename);
                 exit(EXIT_FAILURE);
             } else {
-                printf("   [opts match]\n");
+                printf("   [opts match]");
             }
         }
         /* Reclaim HDF5-allocated variable-length string memory */
@@ -289,7 +289,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
                 fprintf(stderr, "Error: 'sett' attribute in %s does not match expected values\n", filename);
                 exit(EXIT_FAILURE);
             } else {
-                printf("   [sett match]\n");
+                printf("   [sett match]");
             }
         }
     } else {

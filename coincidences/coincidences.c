@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 //#include <dirent.h>
 
 #include "cdefs.h"
@@ -14,11 +15,24 @@
 #include "coincidences.h"
 
 typedef struct { int mc, nc, sc, orig; } TrigKey;
+
 static int cmp_trig_key(const void *a, const void *b) {
     const TrigKey *ka = a, *kb = b;
     if (ka->mc != kb->mc) return (ka->mc > kb->mc) - (ka->mc < kb->mc);
     if (ka->nc != kb->nc) return (ka->nc > kb->nc) - (ka->nc < kb->nc);
     return (ka->sc > kb->sc) - (ka->sc < kb->sc);
+}
+
+/* Comparator for qsort: sort Coincidence array by w desc, then avg_snr desc */
+static int cmp_coi(const void *a, const void *b)
+{
+     const Coincidence *ca = (const Coincidence *)a;
+     const Coincidence *cb = (const Coincidence *)b;
+     if (cb->w != ca->w)               /* primary:   more segments first */
+          return (int)cb->w - (int)ca->w;
+     if (cb->avg_snr > ca->avg_snr) return  1; /* secondary: higher SNR first */
+     if (cb->avg_snr < ca->avg_snr) return -1;
+     return 0;
 }
 
 
@@ -182,7 +196,8 @@ int main (int argc, char* argv[]) {
         free(keys);
 
         int nccells = iccell;
-        printf("Number of coincidence cells: %d/%d (sgnlv_size=%ld)\n", nccells, maxccells, search_par.sgnlv_size);
+        printf("   nccels/maxccells: %d/%d sgnlv_size=%ld  ", 
+            nccells, maxccells, search_par.sgnlv_size);
 #if 0     
         for(int ic=0; ic<nccells; ic++) {
             printf("Cell %d: mc=%d, nc=%d, sc=%d, nctrigs=%d, ictrigs=", 
@@ -292,10 +307,10 @@ int main (int argc, char* argv[]) {
                     coi  = (Coincidence *) realloc(coi, sizeof(Coincidence) * ncoi);
                 }
                 coi[icoi].w     = (short)w;
+                // encode shift as a string
                 for (int ii = 0; ii < 4; ii++)
-                    coi[icoi].shift[ii] = '0' + shift[ii];
+                    coi[icoi].shift[ii] = '0' + shift[3-ii];
                 coi[icoi].shift[4] = '\0';
-                //strncpy(coi[icoi].shift, copts.shift, 4);
                 coi[icoi].cseg          = (short *) malloc(sizeof(short) * w);
                 coi[icoi].trig_mns      = (int *)   malloc(sizeof(int)   * w);
                 coi[icoi].n_ccell_trigs = (short *) malloc(sizeof(short) * w);
@@ -310,7 +325,7 @@ int main (int argc, char* argv[]) {
 
                 if (w > max_coi.w ||
                     (w == max_coi.w && coi[icoi].avg_snr > max_coi.avg_snr)) {
-                        max_coi.w = (short)w; //max_coi.shift = atoi(coi[icoi].shift);
+                        max_coi.w = (short)w;
                         memcpy(max_coi.shift,         coi[icoi].shift,   5);
                         memcpy(max_coi.cseg,          tmp_cseg,          sizeof(short)*w);
                         memcpy(max_coi.trig_mns,      tmp_trig_mns,      sizeof(int)*w);
@@ -337,15 +352,25 @@ int main (int argc, char* argv[]) {
         free(best_cidx_cell); free(best_snr_cell);
         free(best_f_cell); free(n_trigs_cell); free(dirty);
 
-     
-        printf("\nTotal coincidences found (w>=%d): %d\n", copts.mincoin, icoi);
+        qsort(coi, icoi, sizeof(Coincidence), cmp_coi);
+        
+        printf("  icoi(w>=%d)=%d\n", copts.mincoin, icoi);
         if (max_coi.w > 0) {
-            printf("Max coincidence:\n");
-            printf("  w=%d  avg_snr=%.4f  avg_f=%.6f  avg_fdot=%.4e"
+            for(i=0; i<MIN(3, icoi); i++){
+            //for(i=0; i<icoi; i++){
+                float ff = search_par.fpo + (coi[i].avg_f / M_PI)*search_par.B;
+                //if (ff>26.78 && coi[i].w >= 9)
+                printf("   coi[%d]: w=%d  avg_snr=%.4f  avg_f=%.6f (%.6f) avg_fdot=%.4e"
+                    "  avg_ra=%.6f  avg_dec=%.6f shift=%s\n",
+                    i, coi[i].w, coi[i].avg_snr, coi[i].avg_f, ff,
+                    coi[i].avg_fdot, coi[i].avg_ra, coi[i].avg_dec, coi[i].shift);
+            }
+#if 0            
+            printf("   maxcoi: w=%d  avg_snr=%.4f  avg_f=%.6f  avg_fdot=%.4e"
                 "  avg_ra=%.6f  avg_dec=%.6f shift=%s\n",
                 max_coi.w, max_coi.avg_snr, max_coi.avg_f,
                 max_coi.avg_fdot, max_coi.avg_ra, max_coi.avg_dec, max_coi.shift);
-#if 0            
+
             printf("  Segments (seg / trig_idx / n_cell_trigs):");
             for (int is=0; is<max_coi.w; is++)
                 printf("  %d/%d/%d",
@@ -363,14 +388,16 @@ int main (int argc, char* argv[]) {
         }
 
     } // ishift
-     
+
+    printf("\n");
+    
     // write HDF file with ctrigs, if needed
     if (copts.write_ctrigs) {
         char ctrigs_fname[FILE_NAME_LEN];
         // can't use search_par.hemi since it can be 0 (both) and thus
         // the only source of current hemi is the triggers filename
         int fname_len = (int)strlen(copts.trig_files[0]);
-        snprintf(ctrigs_fname, FILE_NAME_LEN, "%s/ctrigs%s", 
+        snprintf(ctrigs_fname, FILE_NAME_LEN, "%s/ctrigs%s",
             copts.out_dir, copts.trig_files[0]+fname_len-10);
         printf("Writing coincidence triggers to file: %s\n", ctrigs_fname);
         write_ctrigs_hdf(ctrigs_fname, &copts, &search_par, ctrigs, seginfo);
@@ -441,7 +468,7 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
         ntrig_seg += ic;
     }
 
-    printf("   [ntrig_seg=%d]\n", ntrig_seg);
+    printf("   [good ntrig_seg=%d]\n", ntrig_seg);
 
     return ntrig_seg;
 }
