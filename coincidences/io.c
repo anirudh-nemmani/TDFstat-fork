@@ -68,6 +68,19 @@ typedef struct {
     int iccell;
 } Ctrig_base;
 
+/* Flat mirror of Coincidence for the per-shift "coi" compound dataset;
+ * the three variable-length arrays (cseg, n_ccell_trigs, trig_mns) are
+ * represented as hvl_t members inside the compound type itself, so a
+ * single dataset per shift is enough (no extra vlen datasets needed).  */
+typedef struct {
+    char  shift[5];
+    short w;
+    float avg_snr, avg_f, avg_fdot, avg_ra, avg_dec;
+    hvl_t cseg;
+    hvl_t n_ccell_trigs;
+    hvl_t trig_mns;
+} Coi_hdf;
+
 
 
 void read_coinc_ini(char *ini_fname, Coinc_opts *copts)
@@ -96,7 +109,7 @@ void read_coinc_ini(char *ini_fname, Coinc_opts *copts)
     copts->mincoin         = iniparser_getint   (ini, "coincidences:mincoin",        4);
     copts->out_dir         = iniparser_getstring(ini, "coincidences:out_dir",       ".");
     copts->trig_dset       = iniparser_getstring(ini, "coincidences:trig_dset", "triggers");
-    copts->coinc_dset_pre  = iniparser_getstring(ini, "coincidences:trig_dset_pre", "coinc");
+    copts->coinc_dset      = iniparser_getstring(ini, "coincidences:coinc_dset", "coinc_");
     copts->write_ctrigs    = iniparser_getint   (ini, "coincidences:write_ctrigs", 0);
     tlist                  = (char *)iniparser_getstring(ini, "coincidences:trig_file_list", NULL);
 
@@ -658,3 +671,239 @@ int write_ctrigs_hdf(const char *ctrigs_fname, Coinc_opts *copts,
         ctrigs_fname, sgnlv_size, nseg);
     return EXIT_SUCCESS;
 } /* write_ctrigs_hdf */
+
+/* =========================================================================
+ * init_coin_hdf()
+ *
+ * Creates (truncates) the coincidences output HDF5 file and writes the
+ * file-level information common to all shifts:
+ *
+ *   Attributes:
+ *     "copts"      - compound, same layout as in write_ctrigs_hdf()
+ *     "search_par" - compound, same layout as in write_ctrigs_hdf()
+ *
+ * Call this once, before the shift loop. Per-shift coincidence results
+ * are then added with write_coi_hdf(), once per shift; seginfo is
+ * attached as an attribute of each shift's dataset (see write_coi_hdf()).
+ *
+ * Returns EXIT_SUCCESS / EXIT_FAILURE.
+ * ========================================================================= */
+int init_coin_hdf(const char *coin_fname, Coinc_opts *copts,
+                  Search_params *search_par)
+{
+    hid_t  file, attr;
+    herr_t hstat;
+
+    hid_t vstr_t = H5Tcopy(H5T_C_S1);
+    H5Tset_size(vstr_t, H5T_VARIABLE);
+
+    file = H5Fcreate(coin_fname, H5F_ACC_TRUNC, H5P_DEFAULT, H5P_DEFAULT);
+    if (file < 0) {
+        fprintf(stderr, "Error: cannot create HDF5 file %s\n", coin_fname);
+        H5Tclose(vstr_t);
+        return EXIT_FAILURE;
+    }
+
+    hid_t scalar_sp = H5Screate(H5S_SCALAR);
+
+    hid_t copts_tid = H5Tcreate(H5T_COMPOUND, sizeof(Copts_attr));
+    H5Tinsert(copts_tid, "refr",      HOFFSET(Copts_attr, refr),      H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "hemi",      HOFFSET(Copts_attr, hemi),      H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "scalef",    HOFFSET(Copts_attr, scalef),    H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "scales",    HOFFSET(Copts_attr, scales),    H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "scalem",    HOFFSET(Copts_attr, scalem),    H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "scalen",    HOFFSET(Copts_attr, scalen),    H5T_NATIVE_INT);
+    hid_t shift_str_t = H5Tcopy(H5T_C_S1);
+    H5Tset_size(shift_str_t, 4);
+    H5Tinsert(copts_tid, "shift", HOFFSET(Copts_attr, shift), shift_str_t);
+    H5Tclose(shift_str_t);
+    H5Tinsert(copts_tid, "mincoin",   HOFFSET(Copts_attr, mincoin),   H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "nseg",      HOFFSET(Copts_attr, nseg),      H5T_NATIVE_INT);
+    H5Tinsert(copts_tid, "cthr",      HOFFSET(Copts_attr, cthr),      H5T_NATIVE_DOUBLE);
+    H5Tinsert(copts_tid, "out_dir",   HOFFSET(Copts_attr, out_dir),   vstr_t);
+    H5Tinsert(copts_tid, "trig_dset", HOFFSET(Copts_attr, trig_dset), vstr_t);
+
+    Copts_attr ca = {
+        .refr      = copts->refr,
+        .hemi      = copts->hemi,
+        .scalef    = copts->scalef,
+        .scales    = copts->scales,
+        .scalem    = copts->scalem,
+        .scalen    = copts->scalen,
+        .mincoin   = copts->mincoin,
+        .nseg      = (int)copts->nseg,
+        .cthr      = copts->cthr,
+        .out_dir   = (char *)copts->out_dir,
+        .trig_dset = (char *)copts->trig_dset,
+    };
+    strncpy(ca.shift, copts->shift ? copts->shift : "0000", 5);
+
+    attr  = H5Acreate2(file, "copts", copts_tid, scalar_sp, H5P_DEFAULT, H5P_DEFAULT);
+    hstat = H5Awrite(attr, copts_tid, &ca);
+    if (hstat < 0)
+        fprintf(stderr, "Warning: cannot write 'copts' attribute to %s\n", coin_fname);
+    H5Aclose(attr);
+    H5Tclose(copts_tid);
+
+    hid_t sparams_tid = H5Tcreate(H5T_COMPOUND, sizeof(Sparams_attr));
+    H5Tinsert(sparams_tid, "band",               HOFFSET(Sparams_attr, band),               H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "nod",                HOFFSET(Sparams_attr, nod),                H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "N",                  HOFFSET(Sparams_attr, N),                  H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "hemi",               HOFFSET(Sparams_attr, hemi),               H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "numlines_band",      HOFFSET(Sparams_attr, numlines_band),      H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "nvlines_all_inband", HOFFSET(Sparams_attr, nvlines_all_inband), H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "sgnlv_size",         HOFFSET(Sparams_attr, sgnlv_size),         H5T_NATIVE_INT);
+    H5Tinsert(sparams_tid, "overlap",            HOFFSET(Sparams_attr, overlap),            H5T_NATIVE_DOUBLE);
+    H5Tinsert(sparams_tid, "narrowdown",         HOFFSET(Sparams_attr, narrowdown),         H5T_NATIVE_DOUBLE);
+    H5Tinsert(sparams_tid, "B",                  HOFFSET(Sparams_attr, B),                  H5T_NATIVE_DOUBLE);
+    H5Tinsert(sparams_tid, "fpo",                HOFFSET(Sparams_attr, fpo),                H5T_NATIVE_DOUBLE);
+    H5Tinsert(sparams_tid, "dt",                 HOFFSET(Sparams_attr, dt),                 H5T_NATIVE_DOUBLE);
+    H5Tinsert(sparams_tid, "grid_file",          HOFFSET(Sparams_attr, grid_file),          vstr_t);
+
+    Sparams_attr spa = {
+        .band               = search_par->band,
+        .nod                = search_par->nod,
+        .N                  = search_par->N,
+        .hemi               = search_par->hemi,
+        .numlines_band      = search_par->numlines_band,
+        .nvlines_all_inband = search_par->nvlines_all_inband,
+        .sgnlv_size         = (int)search_par->sgnlv_size,
+        .overlap            = search_par->overlap,
+        .narrowdown         = search_par->narrowdown,
+        .B                  = search_par->B,
+        .fpo                = search_par->fpo,
+        .dt                 = search_par->dt,
+        .grid_file          = search_par->grid_file,
+    };
+
+    attr  = H5Acreate2(file, "search_par", sparams_tid, scalar_sp, H5P_DEFAULT, H5P_DEFAULT);
+    hstat = H5Awrite(attr, sparams_tid, &spa);
+    if (hstat < 0)
+        fprintf(stderr, "Warning: cannot write 'search_par' attribute to %s\n", coin_fname);
+    H5Aclose(attr);
+    H5Tclose(sparams_tid);
+
+    H5Sclose(scalar_sp);
+    H5Tclose(vstr_t);
+    H5Fclose(file);
+
+    printf("Initialized coincidences HDF5 file: %s\n", coin_fname);
+    return EXIT_SUCCESS;
+} /* init_coin_hdf */
+
+/* =========================================================================
+ * write_coi_hdf()
+ *
+ * Appends the coincidences found for a single shift to an already
+ * initialized coincidences HDF5 file (see init_coin_hdf()).
+ *
+ * Adds one dataset named "<copts->coinc_dset><shift_str>"
+ * (e.g. "coinc_0101"), a compound type with fields:
+ *
+ *     shift  (4-char fixed string)               w        (short)
+ *     avg_snr, avg_f, avg_fdot, avg_ra, avg_dec   (float)
+ *     cseg, n_ccell_trigs                         (vlen short, length w)
+ *     trig_mns                                    (vlen int,   length w)
+ *
+ * shape (icoi,)
+ *
+ * The dataset also gets a "seginfo" attribute, int shape (nseg, 3),
+ * with the caller's current seginfo snapshot (frame number, good
+ * inband triggers, unique triggers for this shift).
+ *
+ * Returns EXIT_SUCCESS / EXIT_FAILURE.
+ * ========================================================================= */
+int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
+                  Coincidence *coi, int icoi, const char *shift_str,
+                  int seginfo[][3])
+{
+    herr_t hstat;
+    int    k;
+
+    hid_t file = H5Fopen(coin_fname, H5F_ACC_RDWR, H5P_DEFAULT);
+    if (file < 0) {
+        fprintf(stderr, "Error: cannot open HDF5 file %s for writing\n", coin_fname);
+        return EXIT_FAILURE;
+    }
+
+    char dset_name[FILE_NAME_LEN];
+    snprintf(dset_name, FILE_NAME_LEN, "%s%s", copts->coinc_dset, shift_str);
+
+    hid_t vlen_short_t = H5Tvlen_create(H5T_NATIVE_SHORT);
+    hid_t vlen_int_t   = H5Tvlen_create(H5T_NATIVE_INT);
+
+    hid_t shift_str_t = H5Tcopy(H5T_C_S1);
+    H5Tset_size(shift_str_t, 4);
+
+    hid_t coi_tid = H5Tcreate(H5T_COMPOUND, sizeof(Coi_hdf));
+    H5Tinsert(coi_tid, "shift",         HOFFSET(Coi_hdf, shift),         shift_str_t);
+    H5Tinsert(coi_tid, "w",             HOFFSET(Coi_hdf, w),             H5T_NATIVE_SHORT);
+    H5Tinsert(coi_tid, "avg_snr",       HOFFSET(Coi_hdf, avg_snr),       H5T_NATIVE_FLOAT);
+    H5Tinsert(coi_tid, "avg_f",         HOFFSET(Coi_hdf, avg_f),         H5T_NATIVE_FLOAT);
+    H5Tinsert(coi_tid, "avg_fdot",      HOFFSET(Coi_hdf, avg_fdot),      H5T_NATIVE_FLOAT);
+    H5Tinsert(coi_tid, "avg_ra",        HOFFSET(Coi_hdf, avg_ra),        H5T_NATIVE_FLOAT);
+    H5Tinsert(coi_tid, "avg_dec",       HOFFSET(Coi_hdf, avg_dec),       H5T_NATIVE_FLOAT);
+    H5Tinsert(coi_tid, "cseg",          HOFFSET(Coi_hdf, cseg),          vlen_short_t);
+    H5Tinsert(coi_tid, "n_ccell_trigs", HOFFSET(Coi_hdf, n_ccell_trigs), vlen_short_t);
+    H5Tinsert(coi_tid, "trig_mns",      HOFFSET(Coi_hdf, trig_mns),      vlen_int_t);
+    H5Tclose(shift_str_t);
+
+    Coi_hdf *cbuf = NULL;
+    if (icoi > 0) {
+        cbuf = (Coi_hdf *) malloc(sizeof(Coi_hdf) * icoi);
+        if (cbuf == NULL) {
+            fprintf(stderr, "Error: cannot allocate coi write buffer\n");
+            H5Tclose(coi_tid); H5Tclose(vlen_short_t); H5Tclose(vlen_int_t);
+            H5Fclose(file);
+            return EXIT_FAILURE;
+        }
+        for (k = 0; k < icoi; k++) {
+            strncpy(cbuf[k].shift, coi[k].shift, 4);
+            cbuf[k].w        = coi[k].w;
+            cbuf[k].avg_snr  = coi[k].avg_snr;
+            cbuf[k].avg_f    = coi[k].avg_f;
+            cbuf[k].avg_fdot = coi[k].avg_fdot;
+            cbuf[k].avg_ra   = coi[k].avg_ra;
+            cbuf[k].avg_dec  = coi[k].avg_dec;
+            cbuf[k].cseg.len          = (size_t)coi[k].w;
+            cbuf[k].cseg.p            = coi[k].cseg;
+            cbuf[k].n_ccell_trigs.len = (size_t)coi[k].w;
+            cbuf[k].n_ccell_trigs.p   = coi[k].n_ccell_trigs;
+            cbuf[k].trig_mns.len      = (size_t)coi[k].w;
+            cbuf[k].trig_mns.p        = coi[k].trig_mns;
+        }
+    }
+
+    hsize_t dims[1] = {(hsize_t)icoi};
+    hid_t space = H5Screate_simple(1, dims, NULL);
+    hid_t dset  = H5Dcreate2(file, dset_name, coi_tid, space,
+        H5P_DEFAULT, H5P_DEFAULT, H5P_DEFAULT);
+    if (icoi > 0) {
+        hstat = H5Dwrite(dset, coi_tid, H5S_ALL, H5S_ALL, H5P_DEFAULT, cbuf);
+        if (hstat < 0)
+            fprintf(stderr, "Error: cannot write '%s' dataset to %s\n", dset_name, coin_fname);
+    }
+    free(cbuf);
+
+    hsize_t si_dims[2] = {copts->nseg, 3};
+    hid_t   si_space   = H5Screate_simple(2, si_dims, NULL);
+    hid_t   si_attr    = H5Acreate2(dset, "seginfo", H5T_NATIVE_INT, si_space,
+        H5P_DEFAULT, H5P_DEFAULT);
+    hstat = H5Awrite(si_attr, H5T_NATIVE_INT, seginfo);
+    if (hstat < 0)
+        fprintf(stderr, "Warning: cannot write seginfo attribute on %s in %s\n",
+            dset_name, coin_fname);
+    H5Aclose(si_attr);
+    H5Sclose(si_space);
+
+    H5Dclose(dset);
+    H5Sclose(space);
+    H5Tclose(coi_tid);
+    H5Tclose(vlen_short_t);
+    H5Tclose(vlen_int_t);
+    H5Fclose(file);
+
+    printf("Written coincidences dataset '%s' to %s (%d coincidences)\n",
+        dset_name, coin_fname, icoi);
+    return EXIT_SUCCESS;
+} /* write_coi_hdf */

@@ -12,7 +12,7 @@ typedef struct {
         write_ctrigs; // Whether to write out coincident triggers
     double cthr;       // Fstatistic threshold for coincidences
     const char *shift; // Cell shifts (binary-like 4 digits corresponding to mnsf shift, e.g. 0101)
-    const char *trig_dset, *coinc_dset_pre; // Trigger dataset name and coincidence dataset prefix
+    const char *trig_dset, *coinc_dset; // Trigger dataset name and coincidence dataset prefix
     const char *out_dir;
     char *trig_files[MAX_NSEG];
     size_t nseg; // Number of segments to compare
@@ -41,7 +41,8 @@ typedef struct {
         B,          // Bandwidth
         fpo,        // Starting frequency of band
         dt,         // Time step
-        lines[MAXL][2]; // Array for lines in given band
+        lines[MAXL][2], // Array for lines in given band
+        vfrac; // Veto fraction of the band
 
     char *grid_file; //just to verify it doesn't change
 
@@ -82,3 +83,8 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
 int write_ctrigs_hdf(const char *ctrigs_fname, Coinc_opts *copts,
                      Search_params *search_par, Coinc_Trigger *ctrigs,
                      int seginfo[][3]);
+int init_coin_hdf(const char *coin_fname, Coinc_opts *copts,
+                  Search_params *search_par);
+int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
+                  Coincidence *coi, int icoi, const char *shift_str,
+                  int seginfo[][3]);

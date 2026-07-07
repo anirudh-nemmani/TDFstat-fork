@@ -98,6 +98,11 @@ int main (int argc, char* argv[]) {
         // return the number of good candidates in the segment
         seginfo[iseg][1] = select_goodcands(iseg, &copts, &search_par, sgnlv, ctrigs);
 
+        for (j=0; j<search_par.sgnlv_size; j++)
+            if (sgnlv[j].ffstat.p) free(sgnlv[j].ffstat.p);
+        free(sgnlv);
+        sgnlv = NULL;
+
 #if 0
         int itest = search_par.sgnlv_size-1;
         printf("   [ctrigs[%d].ffstat[%d].  ", itest, iseg);
@@ -120,6 +125,15 @@ int main (int argc, char* argv[]) {
     int scn = copts.scalen;
     int scs = copts.scales;
     int scf = copts.scalef;
+
+    // initialize the coincidences output HDF5 file: copts/search_par
+    // attributes (per-shift coi datasets, each with its own seginfo
+    // attribute, are added below inside the shift loop via write_coi_hdf())
+    char coin_fname[FILE_NAME_LEN];
+    snprintf(coin_fname, FILE_NAME_LEN, "%s/coin_%04d_%1d.h5",
+        copts.out_dir, search_par.band, search_par.hemi);
+    printf("Initializing coincidences file: %s\n", coin_fname);
+    init_coin_hdf(coin_fname, &copts, &search_par);
 
     // the last 4 bits of ish encode the shifts in m,n,s,f dimensions, respectively;
     // check all 16 combinations of shifts 
@@ -262,16 +276,16 @@ int main (int argc, char* argv[]) {
                     int nfpairs = (int)ctrigs[cidx].ffstat[iseg].len / 2;
                     for (int k=0; k<nfpairs; k++) {
                         float f     = ffp[2*k];
-                        float fstat = ffp[2*k+1];
-                        //int fic = (int)(f * inv_fbin);
+                        //float fstat = ffp[2*k+1];
+                        float snr2 = 2.*ffp[2*k+1] - 4.; // snr^2
                         int fic = (int)floorf(f/(M_PI/search_par.nfftf)/scf - shiftf);
                         if ((unsigned)fic >= (unsigned)nfccells) continue;
                         int idx = iseg * nfccells + fic;
                         if (best_cidx_cell[idx] < 0)   // first touch: mark dirty
                             dirty[ndirty++] = idx;
                         n_trigs_cell[idx]++;
-                        if (fstat > best_snr_cell[idx]) {
-                            best_snr_cell[idx]  = fstat;
+                        if (snr2 > best_snr_cell[idx]) {
+                            best_snr_cell[idx]  = snr2;
                             best_cidx_cell[idx] = cidx;
                             best_f_cell[idx]    = f;
                         }
@@ -317,7 +331,7 @@ int main (int argc, char* argv[]) {
                 memcpy(coi[icoi].cseg,          tmp_cseg,          sizeof(short) * w);
                 memcpy(coi[icoi].trig_mns,      tmp_trig_mns,      sizeof(int)   * w);
                 memcpy(coi[icoi].n_ccell_trigs, tmp_n_ccell_trigs, sizeof(short) * w);
-                coi[icoi].avg_snr  = sum_snr  / w;
+                coi[icoi].avg_snr  = sqrtf(sum_snr / w);
                 coi[icoi].avg_f    = sum_f    / w;
                 coi[icoi].avg_fdot = sum_fdot / w;
                 coi[icoi].avg_ra   = sum_ra   / w;
@@ -353,6 +367,15 @@ int main (int argc, char* argv[]) {
         free(best_f_cell); free(n_trigs_cell); free(dirty);
 
         qsort(coi, icoi, sizeof(Coincidence), cmp_coi);
+
+        // build shift string (same encoding as coi[].shift) and write
+        // this shift's coincidences (with its seginfo snapshot) to the
+        // coin HDF5 file
+        char shift_str[5];
+        for (int ii=0; ii<4; ii++)
+            shift_str[ii] = '0' + shift[3-ii];
+        shift_str[4] = '\0';
+        write_coi_hdf(coin_fname, &copts, coi, icoi, shift_str, seginfo);
         
         printf("  icoi(w>=%d)=%d\n", copts.mincoin, icoi);
         if (max_coi.w > 0) {
@@ -386,6 +409,22 @@ int main (int argc, char* argv[]) {
         } else {
             printf("No coincidences above mincoin=%d found.\n", copts.mincoin);
         }
+
+        // free per-shift allocations before the next shift iteration
+        for (i=0; i<maxccells; i++)
+            free(s2c_mns[i].ictrigs);
+        free(s2c_mns);
+
+        for (i=0; i<icoi; i++) {
+            free(coi[i].cseg);
+            free(coi[i].trig_mns);
+            free(coi[i].n_ccell_trigs);
+        }
+        free(coi);
+
+        free(max_coi.cseg);
+        free(max_coi.trig_mns);
+        free(max_coi.n_ccell_trigs);
 
     } // ishift
 
@@ -469,6 +508,8 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
     }
 
     printf("   [good ntrig_seg=%d]\n", ntrig_seg);
+
+    free(ffbuffer);
 
     return ntrig_seg;
 }
