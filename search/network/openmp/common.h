@@ -1,3 +1,10 @@
+#ifndef __COMMON_H__
+#define __COMMON_H__
+
+// auxi.h first: struct.h uses the FFTW_PRE macro defined there
+#include "auxi.h"
+#include "struct.h"
+
 #define RAD_TO_DEG (180/M_PI) // = 180/pi
 
 //constants
@@ -24,3 +31,12 @@
 
 double fpo(int band, double overlap, double dt);
 void get_fdot_range(double fpo, double dt, double *fdot_min, double *fdot_max);
+
+// Per-detector input file readers; det is an index into the ifo[] array.
+// Called for every detector by init_arrays() (init.c), and individually by
+// tools that need only part of the input data (e.g. vlinegen).
+void read_xdat( Search_settings *sett, Command_line_opts *opts, int det );
+void read_detssb( Search_settings *sett, Command_line_opts *opts, int det );
+void read_start_time( Search_settings *sett, Command_line_opts *opts, int det );
+
+#endif

@@ -9,6 +9,14 @@ void read_ini_file(
                     int argc,
                     char* argv[]);
 
+void alloc_sig_array(
+                    Search_settings *sett,
+                    int det);
+
+void init_aux_array(
+                    Search_settings *sett,
+                    Aux_arrays *aux_arr);
+
 void init_arrays(
                     Search_settings *sett,
                     Command_line_opts *opts,

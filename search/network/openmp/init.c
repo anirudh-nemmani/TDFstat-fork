@@ -201,120 +201,70 @@ void read_grid( Search_settings *sett, Command_line_opts *opts )
 
 /* Array initialization */
 
+/* Allocates the per-detector work arrays of the search (amplitude modulation
+ * and time shift arrays). Not needed by tools that only read the input data.
+ */
+void alloc_sig_array( Search_settings *sett, int det )
+{
+
+     ifo[det].sig.xDatma = fftw_malloc(sett->N*sizeof(complex double));
+     ifo[det].sig.xDatmb = fftw_malloc(sett->N*sizeof(complex double));
+
+     ifo[det].sig.aa = (double *) calloc(sett->N, sizeof(double));
+     ifo[det].sig.bb = (double *) calloc(sett->N, sizeof(double));
+
+     ifo[det].sig.shft = (double *) calloc(sett->N, sizeof(double));
+     ifo[det].sig.shftf = (double *) calloc(sett->N, sizeof(double));
+
+} // end of alloc sig array
+
+
+/* Auxiliary arrays, Earth's rotation */
+
+void init_aux_array( Search_settings *sett, Aux_arrays *aux_arr )
+{
+
+     int i;
+     double omrt;
+
+     aux_arr->t2 = (double *) calloc(sett->N, sizeof (double));
+     aux_arr->cosmodf = (double *) calloc(sett->N, sizeof (double));
+     aux_arr->sinmodf = (double *) calloc(sett->N, sizeof (double));
+
+     for (i=0; i<sett->N; i++) {
+          omrt = (sett->omr)*i;     // Earth angular velocity * dt * i
+          aux_arr->t2[i] = sqr((double)i);
+          aux_arr->cosmodf[i] = cos(omrt);
+          aux_arr->sinmodf[i] = sin(omrt);
+     }
+
+} // end of init aux array
+
+
+/* Allocates and initializes the data, detector ephemeris and F-statistic
+ * arrays, by calling the individual readers (common.c) and allocators for
+ * every detector of the network.
+ */
+
 void init_arrays( Search_settings *sett,
                   Command_line_opts *opts,
                   Aux_arrays *aux_arr )
 {
 
      int i;
-     size_t status;
-
-     // Allocates and initializes to zero the data, detector ephemeris
-     // and the F-statistic arrays
-
-     FILE *data;
 
      for (i=0; i<sett->nifo; i++) {
 
-          ifo[i].sig.xDat = (float *) calloc(sett->N, sizeof(float));
-
           // Input time-domain data handling
-          //
-          // The file name ifo[i].xdatname is constructed
-          // in settings.c, while looking for the detector
-          // subdirectories
-
-          if((data = fopen(ifo[i].xdatname, "r")) != NULL) {
-               if (opts->mods && strstr(opts->mods, "read_O3") != NULL) {
-                    // "read_O3" is present in opts->mods
-                    double *tmp_xdat;
-                    tmp_xdat = (double *) calloc(sett->N, sizeof(double));
-                    status = fread((void *)(tmp_xdat), sizeof(double), sett->N, data);
-                    for (int j=0; j<sett->N; j++)
-                         ifo[i].sig.xDat[j] = (float) tmp_xdat[j];
-                    free(tmp_xdat);
-               } else {
-                    status = fread((void *)(ifo[i].sig.xDat), sizeof(float), sett->N, data);
-               }
-               fclose (data);
-          } else {
-               perror (ifo[i].xdatname);
-               exit(EXIT_FAILURE);
-          }
-
-          int j, Nzeros=0;
-          // Checking for null values in the data
-          for (j=0; j < sett->N; j++)
-               if(!ifo[i].sig.xDat[j]) Nzeros++;
-
-          ifo[i].sig.Nzeros = Nzeros;
-
-          // factor N/(N - Nzeros) to account for null values in the data
-          ifo[i].sig.crf0 = (double)sett->N/(sett->N - ifo[i].sig.Nzeros);
-
-          // Estimation of the variance for each detector
-          ifo[i].sig.sig2 = (ifo[i].sig.crf0)*var(ifo[i].sig.xDat, sett->N);
-
-          ifo[i].sig.DetSSB = (double *) calloc(3*sett->N, sizeof(double));
-          /*
-          const size_t array_bytes = 3*sett->N*sizeof(double);
-          ifo[i].sig.DetSSB = NULL;
-          if ( posix_memalign((void**)&ifo[i].sig.DetSSB, 32, array_bytes) ) exit (1);
-          */
+          read_xdat(sett, opts, i);
 
           // Ephemeris file handling
-          char filename[562];
-          sprintf (filename, "%s/%03d/%s/DetSSB.bin", opts->indir, opts->seg, ifo[i].name);
-
-          if((data = fopen(filename, "r")) != NULL) {
-               // Detector position w.r.t Solar System Baricenter
-               // for every datapoint
-               status = fread((void *)(ifo[i].sig.DetSSB), sizeof(double), 3*sett->N, data);
-
-               // Deterministic phase defining the position of the Earth
-               // in its diurnal motion at t=0
-               status = fread((void *)(&ifo[i].sig.phir), sizeof(double), 1, data);
-
-               // Earth's axis inclination to the ecliptic at t=0
-               status = fread((void *)(&ifo[i].sig.epsm), sizeof(double), 1, data);
-               fclose (data);
-
-               // printf("[%s] Using %s as ephemerids...\n", ifo[i].name, filename);
-          } else {
-               perror (filename);
-               return ;
-          }
+          read_detssb(sett, opts, i);
 
           // Start time reading
-          sprintf (filename, "%s/%03d/%s/starting_date", opts->indir, opts->seg, ifo[i].name);
+          read_start_time(sett, opts, i);
 
-          if ((data = fopen(filename, "r")) != NULL) {
-               // Start time of the data segment in GPS seconds
-               status = fscanf(data, "%lf", &ifo[i].start_time);
-               fclose (data);
-               printf("[%s] Starting time = %.3f\n", ifo[i].name, ifo[i].start_time);
-          } else {
-               perror (filename);
-               return ;
-          }
-
-          // sincos
-          ifo[i].sig.sphir = sin(ifo[i].sig.phir);
-          ifo[i].sig.cphir = cos(ifo[i].sig.phir);
-          ifo[i].sig.sepsm = sin(ifo[i].sig.epsm);
-          ifo[i].sig.cepsm = cos(ifo[i].sig.epsm);
-
-          sett->sepsm = ifo[i].sig.sepsm;
-          sett->cepsm = ifo[i].sig.cepsm;
-
-          ifo[i].sig.xDatma = fftw_malloc(sett->N*sizeof(complex double));
-          ifo[i].sig.xDatmb = fftw_malloc(sett->N*sizeof(complex double));
-
-          ifo[i].sig.aa = (double *) calloc(sett->N, sizeof(double));
-          ifo[i].sig.bb = (double *) calloc(sett->N, sizeof(double));
-
-          ifo[i].sig.shft = (double *) calloc(sett->N, sizeof(double));
-          ifo[i].sig.shftf = (double *) calloc(sett->N, sizeof(double));
+          alloc_sig_array(sett, i);
 
      } // end loop for detectors
 
@@ -341,18 +291,7 @@ void init_arrays( Search_settings *sett,
      sett->sepsm = ifo[0].sig.sepsm;
      sett->cepsm = ifo[0].sig.cepsm;
 
-     // Auxiliary arrays, Earth's rotation
-     aux_arr->t2 = (double *) calloc(sett->N, sizeof (double));
-     aux_arr->cosmodf = (double *) calloc(sett->N, sizeof (double));
-     aux_arr->sinmodf = (double *) calloc(sett->N, sizeof (double));
-     double omrt;
-
-     for (i=0; i<sett->N; i++) {
-          omrt = (sett->omr)*i;     // Earth angular velocity * dt * i
-          aux_arr->t2[i] = sqr((double)i);
-          aux_arr->cosmodf[i] = cos(omrt);
-          aux_arr->sinmodf[i] = sin(omrt);
-     }
+     init_aux_array(sett, aux_arr);
 
 } // end of init arrays
 
