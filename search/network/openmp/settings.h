@@ -11,6 +11,8 @@
 
 #define NAV 4096    /* to define nmin and nmax on the edges; multiplied by B=0.5/dt */
 
+// this was moved to common.h
+/*
 #define RAD_TO_DEG (180/M_PI) // = 180/pi
 
 //constants
@@ -34,6 +36,7 @@
 
 #define C_YEARSEC (365.25*C_TAIDAY)
 //31557600.0          // year in seconds = 365.25 * 86400
+ */
 
 void search_settings( Search_settings *sett );
 void detectors_settings( Search_settings *sett, Command_line_opts *opts );

@@ -15,6 +15,7 @@
 #include <gsl/gsl_eigen.h>
 #include <time.h>
 
+#include "common.h"
 #include "auxi.h"
 #include "struct.h"
 #include "init.h"
@@ -139,8 +140,8 @@ void read_ini_file( Search_settings *sett,
      }
      opts->narrowdown *= M_PI;
 
-     sett->fpo = 10. + (1. - opts->overlap)*opts->band*(0.5/sett->dt);
-
+     //sett->fpo = 10. + (1. - opts->overlap)*opts->band*(0.5/sett->dt);
+     sett->fpo = fpo(opts->band, opts->overlap, sett->dt);
 } // read_ini_file
 
 
@@ -322,10 +323,10 @@ void init_arrays( Search_settings *sett,
      for (i=1; i<sett->nifo; i++) {
           if (ifo[i].start_time != st_temp) {
               printf("Start time doesn't match between detectors %s and %s. Aborting...\n", ifo[0].name, ifo[i].name);
-              exit(EXIT_FAILURE);   
+              exit(EXIT_FAILURE);
           }
      }
-      
+
 
      // Check if the ephemerids have the same epsm parameter
      for(i=1; i<sett->nifo; i++) {
@@ -364,23 +365,23 @@ void read_signal_file( Signal_params *sgnl_params,
 {
      FILE *data;
      char amporsnr[4];
-     
+
      if ((data=fopen (opts->addsig, "r")) != NULL) {
          // Fscanning for the GW amplitude h0 or signal-to-noise,
          // the grid size and the reference frame
          // (for which the signal freq. is not spun-down/up)
-         
+
          do {
              fscanf (data, "%s", amporsnr);
          } while ( strcmp(amporsnr, "amp")!=0 && strcmp(amporsnr, "snr")!=0 );
-         
+
          strcpy(sgnl_params->amporsnr, amporsnr);
          if(!strcmp(amporsnr, "amp")) {
              fscanf (data, "%le %d %le %le %le %le %le %le %le",
                                   &sgnl_params->h0, &sgnl_params->reffr,
                                   &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
                                   &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
-             
+
              printf("add_signal(): GW amplitude h0 is %le\n   The reference band of the signal is %d\n"
                     "   The signal is injected at the following parameters:\n"
                     "   Frequency [Hz]         : %le\n"
@@ -397,7 +398,7 @@ void read_signal_file( Signal_params *sgnl_params,
                                   &sgnl_params->snr, &sgnl_params->reffr,
                                   &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
                                   &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
-             
+
              printf("add_signal(): GW (network) signal-to-noise ratio is %le\n   The reference band of the signal is %d\n"
                     "   The signal is injected at the following parameters:\n"
                     "   Frequency [Hz]         : %le\n"
@@ -414,7 +415,7 @@ void read_signal_file( Signal_params *sgnl_params,
              exit(0);
          }
          fclose (data);
-         
+
      } else {
          perror (opts->addsig);
      }
@@ -439,10 +440,10 @@ void add_signal( Search_settings *sett,
      double nSource[3], freqo[2];
 
      char amporsnr[4];
-          
+
      // Setting the reference frame
      reffr = sgnl_params->reffr;
-     
+
      // Converting the frequency into dimensionless units
      freqo[0] = 2 * M_PI * sgnl_params->freq * sett->dt;
      freqo[1] = M_PI * sgnl_params->fdot * sett->dt * sett->dt;

@@ -5,9 +5,11 @@
 #include <dirent.h>
 #include <float.h>
 
+#include "common.h"
 #include "auxi.h"
 #include "struct.h"
 #include "settings.h"
+#include "timer.h"
 #include <glob.h>
 
 
@@ -26,7 +28,7 @@ void search_settings(Search_settings* sett)
      oms = 2.*M_PI*(sett->fpo)*dt;     // Dimensionless angular frequency
      omr = C_OMEGA_R*dt;
 
-     N = round (sett->nod*C_SIDDAY/dt);      // No. of data points
+     N = round(sett->nod*C_SIDDAY/dt);      // No. of data points
 
      nfft = 1 << (int)ceil(log(N)/log(2.));    // length of FFT
      s = 1;                                    // No. of spindowns
@@ -34,6 +36,8 @@ void search_settings(Search_settings* sett)
      // spindown range of NS in physical units [Hz/s]
      // we assume minimum NS age 1000 yr
      double fdotmin, fdotmax;
+     get_fdot_range(sett->fpo, dt, &fdotmin, &fdotmax);
+/*
      if (sett->fpo < 200.) {
           fdotmin = 2.*(sett->fpo+B)/(2.*1000.*C_YEARSEC);
           fdotmax = 0.;
@@ -41,6 +45,7 @@ void search_settings(Search_settings* sett)
           fdotmin = 2e-10;
           fdotmax = 2e-11;
      }
+ */
 
      // dimensionless spindown range
      Smax = M_PI*fdotmin*dt*dt;
@@ -538,7 +543,7 @@ int read_lines( Search_settings *sett,	Command_line_opts *opts )
      }
 #endif
      sett->nvlines_all_inband = j;
-     
+
      // scale veto lines to radians (narrowdown lines are already scaled)
      for (i=sett->numlines_band; i<sett->nvlines_all_inband; i++) {
           fl = sett->lines[i][0];
@@ -570,7 +575,7 @@ int read_lines( Search_settings *sett,	Command_line_opts *opts )
           printf("Band veto fraction > 90%% in allsky mode. Exiting...\n");
           exit(EXIT_SUCCESS);
      }
-     
+
      // set number of veto lines only if veto option is given
      if (opts->veto_flag) {
           printf("Veto lines will be applied!\n");
@@ -647,7 +652,7 @@ float lines_veto_fraction(Search_settings* sett, int lf, int le)
      }
      if ( ll < M_PI) gap += M_PI - ll;
 
-     vf = (float)(M_PI-gap)/M_PI;     
+     vf = (float)(M_PI-gap)/M_PI;
      printf("Band veto fraction = %6.4f\n", vf);
      /*
      if( (gap <= 1.e-10) && vflag) {
