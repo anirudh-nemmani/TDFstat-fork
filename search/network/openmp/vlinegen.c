@@ -227,7 +227,7 @@ int read_lines( Search_settings *sett, Command_line_opts *opts)
     printf("%d veto lines in band [Hz, radians, line info]:\n", j-sett->numlines_band);
 
     // write veto lines found in this band to a text file
-    sprintf(linefile, "%s/vlines.dat", opts->outdir);
+    sprintf(linefile, "%s/vlines_%04d.dat", opts->outdir, opts->band);
     if ( !(data = fopen(linefile, "w")) ) {
         printf("Can't open %s for writing!\n", linefile);
         exit(EXIT_FAILURE);
@@ -248,14 +248,23 @@ int read_lines( Search_settings *sett, Command_line_opts *opts)
         fprintf(data, "   %.15f  %.15f  %.15f  %f  %s\n",
             sett->lines[i][0], sett->lines[i][1], fl, fr, line_aux[i]);
     }
+
+    // calculate veto fraction of the band (also prints it to stdout)
+    double vf;
+    vf = lines_veto_fraction(sett, sett->numlines_band, sett->nvlines_all_inband);
+    fprintf(data, "#band_veto_fraction= %6.4f\n", vf);
     fclose(data);
     printf("Wrote veto lines in band to: %s\n", linefile);
 
-    // calculate veto fraction of the band (also prints it to stdout)
-    lines_veto_fraction(sett, sett->numlines_band, sett->nvlines_all_inband);
+    // warnings about high veto fraction
+    if( (vf > 0.999999) && opts->veto_flag) {
+        printf("[Warning] This band is fully vetoed!\n");
+    }
+    if( (vf > 0.9) && (strcmp(opts->gtype, "allsky")==0) ){
+        printf("[Warning] Band veto fraction > 90%% in allsky mode\n");
+    }
 
     return 0;
-
 }
 
 
