@@ -57,23 +57,19 @@ int read_lines( Search_settings *sett, Command_line_opts *opts)
     // per-detector max line broadening due to demodulation (velocity and time derivative of DetSSB)
     for (int det=0; det < sett->nifo; det++) {
 
-        double dEmax[3] = {0}, dtEmax[3] = {0};
+        normdEmax[det]  = 0.;
+        normdtEmax[det] = 0.;
 
         for (i=0; i<sett->N-1; i++) {
+            double dE=0, dtE=0;
             for (j=0; j<3; j++) {
-                double dE  = fabs(ifo[det].sig.DetSSB[(i+1)*3+j] - ifo[det].sig.DetSSB[i*3+j]);
-                double dtE = fabs(ifo[det].sig.DetSSB[(i+1)*3+j]*(i+1) - ifo[det].sig.DetSSB[i*3+j]*i)*sett->dt;
-                if (dE  > dEmax[j])  dEmax[j]  = dE;
-                if (dtE > dtEmax[j]) dtEmax[j] = dtE;
+                dE  += pow(fabs(ifo[det].sig.DetSSB[(i+1)*3+j] - ifo[det].sig.DetSSB[i*3+j]), 2);
+                dtE += pow(fabs(ifo[det].sig.DetSSB[(i+1)*3+j]*(i+1) - ifo[det].sig.DetSSB[i*3+j]*i)*sett->dt , 2);
             }
+            if (dE  > normdEmax[det])  normdEmax[det]  = dE;
+            if (dtE > normdtEmax[det]) normdtEmax[det] = dtE;
         }
 
-        normdtEmax[det] = 0.;
-        normdEmax[det]  = 0.;
-        for (j=0; j<3; j++) {
-            normdtEmax[det] += pow(dtEmax[j], 2.);
-            normdEmax[det]  += pow(dEmax[j], 2.);
-        }
         printf("Detector %d: normdtEmax = %f, normdEmax = %f\n", det,
             sqrt(normdtEmax[det]), sqrt(normdEmax[det]));
     }
@@ -245,7 +241,7 @@ int read_lines( Search_settings *sett, Command_line_opts *opts)
 
         printf("   %.15f  %.15f  %.15f  %.15f  %s\n",
             sett->lines[i][0], sett->lines[i][1], fl, fr, line_aux[i]);
-        fprintf(data, "   %.15f  %.15f  %.15f  %f  %s\n",
+        fprintf(data, "   %.15f  %.15f  %.15f  %.15f  %s\n",
             sett->lines[i][0], sett->lines[i][1], fl, fr, line_aux[i]);
     }
 
