@@ -524,14 +524,5 @@ double det (const double *a, int N)
 } /* det() */
 
 
-int compared2c(const void *a, const void *b)
-{
-     double* da = (double*)a;
-     double* db = (double*)b;
-
-     int diff1 = (da[0] > db[0]) - (da[0] < db[0]);
-     if (diff1 != 0) return diff1;
-     return (da[1] > db[1]) - (da[1] < db[1]);
-}
 
 #endif

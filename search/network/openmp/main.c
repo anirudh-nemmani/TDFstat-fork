@@ -17,6 +17,7 @@
 
 #include "auxi.h"
 #include "struct.h"
+#include "common.h"
 #include "settings.h"
 #include "jobcore.h"
 #include "init.h"
@@ -80,10 +81,19 @@ int main (int argc, char* argv[])
      // adds two lines
      if(opts.narrowdown < 0.5*M_PI) narrow_down_band(&sett, &opts);
 
-     // Reading veto lines data from external files
-     printf("Reading veto files...\n");
-     read_lines(&sett, &opts);
-     if (opts.gen_vlines_flag) exit(EXIT_SUCCESS);
+     // Handle veto lines and opts.veto_flag
+     char band_vl_file[FNAME_LENGTH];
+     sprintf(band_vl_file, "%s/vlines_%04d%s.dat", opts.outdir, opts.band, opts.label);
+     if (access(band_vl_file, R_OK) == 0) {
+         // read lines from band_vl_file
+         read_band_vlines(&sett, &opts, band_vl_file);
+     } else {
+         // extract inband veto lines from global veto file
+         // and write them to band_vl_file
+         extract_band_vlines(&sett, &opts, band_vl_file);
+     }
+
+     exit(EXIT_SUCCESS);
 
      // Amplitude modulation functions for each detector
      for(i=0; i<sett.nifo; i++)

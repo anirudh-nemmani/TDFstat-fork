@@ -39,4 +39,12 @@ void read_xdat( Search_settings *sett, Command_line_opts *opts, int det );
 void read_detssb( Search_settings *sett, Command_line_opts *opts, int det );
 void read_start_time( Search_settings *sett, Command_line_opts *opts, int det );
 
+int compared2c(const void *a, const void *b);
+int extract_band_vlines( Search_settings *sett, Command_line_opts *opts, char *band_vl_file);
+int line_in_band(double* fl, double* fr, Search_settings* sett );
+void narrow_down_band(Search_settings* sett, Command_line_opts *opts);
+float lines_veto_fraction(Search_settings* sett, int lf, int le);
+
+void read_band_vlines(Search_settings *sett, Command_line_opts *opts, char *band_vl_file);
+
 #endif

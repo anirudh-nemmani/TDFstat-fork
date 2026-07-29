@@ -94,26 +94,17 @@ sigen: sigen.c auxi.c settings.c
 #----------------------------------------------
 
 # Standalone tool: reads a search .ini file and writes out vlines.dat
-# (veto lines found in the given band). Links the same init.c and settings.c
-# as the search itself, so no search code is duplicated.
-#
-# vlinegen.c does keep its own read_lines(), line_in_band(), narrow_down_band()
-# and lines_veto_fraction(). Those four names also exist in settings.c, so that
-# file is compiled here with the names renamed, which leaves the copies in
-# vlinegen.c as the only definitions and avoids a clash at link time.
-VLG_RENAME = -Dread_lines=settings_read_lines \
-	     -Dline_in_band=settings_line_in_band \
-	     -Dnarrow_down_band=settings_narrow_down_band \
-	     -Dlines_veto_fraction=settings_lines_veto_fraction
-
+# (veto lines found in the given band). vlinegen.c holds only main(); the veto
+# line code it uses - extract_band_vlines(), line_in_band(), narrow_down_band(),
+# lines_veto_fraction() and compared2c() - lives in common.c and is shared with
+# the search, so no search code is duplicated and the same sources are linked
+# as for the search itself (minus main.c, jobcore.c, spinmod.c, io.c, timer.c).
 VLG_CFLAGS = -DCOMP_FLOAT -I$(FFTW_DIR)/include -I$(INIPARSER_DIR)/src
 VLG_LIBS = -L$(FFTW_DIR)/lib -L$(INIPARSER_DIR) \
 	   -Wl,-Bdynamic -lc -liniparser -lgsl -lgslcblas \
 	   -lfftw3 -lfftw3_omp -lfftw3f -lfftw3f_omp -lhdf5 -lhdf5_hl -lm -lrt
 
-vlinegen: vlinegen.c auxi.c init.c settings.c common.c \
-	  settings.h struct.h auxi.h init.h common.h Makefile
-	$(CC) $(VLG_CFLAGS) $(VLG_RENAME) -c -o settings-vlg.o settings.c
-	$(CC) $(VLG_CFLAGS) -o $@ vlinegen.c auxi.c init.c common.c settings-vlg.o \
-	    $(VLG_LIBS)
-	rm -f settings-vlg.o
+VLG_SRC = vlinegen.c auxi.c init.c settings.c common.c
+
+vlinegen: $(VLG_SRC) settings.h struct.h auxi.h init.h common.h Makefile
+	$(CC) $(VLG_CFLAGS) -o $@ $(VLG_SRC) $(VLG_LIBS)

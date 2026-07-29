@@ -13,6 +13,7 @@
 
 #define MAXL 512               // Max number of veto lines in band
 #define MAXVFILEL 8192         // Max number of text lines in the veto file
+#define MAXLINE 1024            // Max length of a line in the veto file
 
 /* Command line options for search */
 typedef struct _comm_line_opts {
@@ -166,7 +167,7 @@ typedef struct _detector {
      Signals sig;
 
      double start_time;  // Start time of the detector
-     
+
 } Detector_settings;
 
 /* Global array of detectors (network) */
