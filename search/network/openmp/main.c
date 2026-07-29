@@ -93,8 +93,6 @@ int main (int argc, char* argv[])
          extract_band_vlines(&sett, &opts, band_vl_file);
      }
 
-     exit(EXIT_SUCCESS);
-
      // Amplitude modulation functions for each detector
      for(i=0; i<sett.nifo; i++)
           rogcvir(&ifo[i]);
