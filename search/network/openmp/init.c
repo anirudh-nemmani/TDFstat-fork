@@ -104,8 +104,6 @@ void read_ini_file( Search_settings *sett,
      //   FLAGS
      // [0, 1] (in future other values can select different subsets of lines
      opts->veto_flag = iniparser_getint(ini, "search:veto_flag", 0);
-     // [0, 1] if 1 generate vlines file and exit
-     opts->gen_vlines_flag = iniparser_getint(ini, "search:gen_vlines_flag", 0);
      // [0, 1] generate checkpoint files at each new sky position
      opts->checkp_flag = iniparser_getint(ini, "search:checkp_flag", 0);
 

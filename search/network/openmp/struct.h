@@ -18,7 +18,7 @@
 /* Command line options for search */
 typedef struct _comm_line_opts {
 
-     int checkp_flag, veto_flag, gen_vlines_flag, help_flag;
+     int checkp_flag, veto_flag, help_flag;
      //int fftinterp;
      int seg, band, hemi; //, nod;
      double thr;
