@@ -59,12 +59,11 @@ int hdfout_init (char *outname, Command_line_opts *opts, Search_settings *sett,
      H5Tinsert(cmd_opts_tid, "usedet", HOFFSET(Command_line_opts, usedet), vstr_type_id);
      H5Tinsert(cmd_opts_tid, "addsig", HOFFSET(Command_line_opts, addsig), vstr_type_id);
      H5Tinsert(cmd_opts_tid, "mods", HOFFSET(Command_line_opts, mods), vstr_type_id);
+     H5Tinsert(cmd_opts_tid, "label", HOFFSET(Command_line_opts, label), vstr_type_id);
 
      H5Tinsert(cmd_opts_tid, "veto_flag", HOFFSET(Command_line_opts, veto_flag), H5T_NATIVE_INT);
      H5Tinsert(cmd_opts_tid, "checkp_flag", HOFFSET(Command_line_opts, checkp_flag), H5T_NATIVE_INT);
 
-     //H5Tinsert(cmd_opts_tid, "label", HOFFSET(Command_line_opts, label), H5T_C_S1);
-     //H5Tinsert(cmd_opts_tid, "state_file", HOFFSET(Command_line_opts, state_file), H5T_C_S1);
      H5Tinsert(cmd_opts_tid, "gtype", HOFFSET(Command_line_opts, gtype), vstr_type_id);
      H5Tinsert(cmd_opts_tid, "gcenter", HOFFSET(Command_line_opts, gcenter), vstr_type_id);
      H5Tinsert(cmd_opts_tid, "gsizes", HOFFSET(Command_line_opts, gsizes), vstr_type_id);
