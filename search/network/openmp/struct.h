@@ -23,6 +23,7 @@ typedef struct _comm_line_opts {
      int seg, band, hemi; //, nod;
      double thr;
      double fpo_val, narrowdown, overlap;
+     // dump_range_file is kept for backward HDF compatibility, but is not used anymore
      const char *indir, *outdir, *grid_file, *dump_range_file,
           *usedet, *addsig, *fstat_norm, *label, *mods,
           *gtype, *gcenter, *gsizes, *gsteps;

@@ -8,7 +8,7 @@
 #include "auxi.h"
 #include "struct.h"
 
-#define FORMAT_VERSION  1
+#define FORMAT_VERSION  2
 #define TRIG_DSET_NAME  "triggers"
 #define TRIG_RANK       1
 
@@ -57,7 +57,6 @@ int hdfout_init (char *outname, Command_line_opts *opts, Search_settings *sett,
      H5Tinsert(cmd_opts_tid, "grid_file", HOFFSET(Command_line_opts, grid_file), vstr_type_id);
 
      H5Tinsert(cmd_opts_tid, "usedet", HOFFSET(Command_line_opts, usedet), vstr_type_id);
-     //H5Tinsert(cmd_opts_tid, "dump_range_file", HOFFSET(Command_line_opts, dump_range_file), H5T_C_S1);
      H5Tinsert(cmd_opts_tid, "addsig", HOFFSET(Command_line_opts, addsig), vstr_type_id);
      H5Tinsert(cmd_opts_tid, "mods", HOFFSET(Command_line_opts, mods), vstr_type_id);
 

@@ -81,9 +81,9 @@ void read_ini_file( Search_settings *sett,
      // path to the grid file (absolute or relative)
      opts->grid_file = iniparser_getstring(ini, "search:grid_file", "");
      // name of the range file to read
-     //opts->range_file = iniparser_getstring(ini, "search:range_file", "");
+     // opts->range_file = iniparser_getstring(ini, "search:range_file", "");
      // name of the range file to dump and exit
-     opts->dump_range_file = iniparser_getstring(ini, "search:dump_range_file", "");
+     // opts->dump_range_file = iniparser_getstring(ini, "search:dump_range_file", "");
      // name of the file with signall to add
      // TODO: single line signals to enable multiple signals, more flexible gsize
      opts->addsig = iniparser_getstring(ini, "search:addsig", "");
