@@ -356,7 +356,7 @@ int extract_band_vlines(Search_settings *sett, Command_line_opts *opts, char *ba
         } // switch
     } // i
 
-    printf("Extracted %d veto lines in band from %s [Hz, radians, line info]:\n", j-sett->numlines_band, band_vl_file);
+    printf("Found %d veto lines in band [radians, Hz, line info]:\n", j-sett->numlines_band);
 
     // write veto lines found in this band to a text file
     if ( !(data = fopen(band_vl_file, "w")) ) {
@@ -374,7 +374,7 @@ int extract_band_vlines(Search_settings *sett, Command_line_opts *opts, char *ba
         sett->lines[i][0] = (sett->lines[i][0] - sett->fpo)/(sett->B)*M_PI;
         sett->lines[i][1] = (sett->lines[i][1] - sett->fpo)/(sett->B)*M_PI;
 
-        printf("   %.15f  %.15f  %.15f  %.15f  %s\n",
+        printf("   %.8f  %.8f  %.8f  %.8f  %s\n",
             sett->lines[i][0], sett->lines[i][1], fl, fr, line_aux[i]);
         fprintf(data, "   %.15f  %.15f  %.15f  %.15f  %s\n",
             sett->lines[i][0], sett->lines[i][1], fl, fr, line_aux[i]);
