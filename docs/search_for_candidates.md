@@ -49,58 +49,49 @@ grid_file = 013/grids/grid_013_0072_H1L1c.bin
 
 # optional
 usedet =              # use only specified detectors 
-range_file =          # range.dat , limits parameter space of the search
-dump_range_file =     # name of the file to dump max. search ranges and exit
 addsig =              # name of the file with signals to be injected
 mods = read_O3        # coma separated list of modifiers: read_O3
 
 # flags
 veto_flag = 0         # veto lines: 0-no, 1-yes
-gen_vlines_flag = 0   # if 1 generate vlines file and exit
 checkp_flag = 0       # write checkpoint file on every triggers buffer flush
 ```
 
-### Details of options / concepts
+### options / concepts
 
 
-??? note "indir, input data (click to expand)"
+#### indir, input data
 
-    <br/>Input data must be prepared in a way outlined in the [genseg documentation](../input_data/#tdfstat-input-data-structure). Requied files are: xdat (time series), DetSSB (ephemeris), grid (grid generator matrix). Optional files: lines (veto lines), addsig (software injections), range file (search ranges).  
-    Please note that same of the parameters have to match those used during input data generation (e.g., dt, overlap, nod).
+Input data must be prepared in a way outlined in the [genseg documentation](../input_data/#tdfstat-input-data-structure). Requied files are: xdat (time series), DetSSB (ephemeris), grid (grid generator matrix). Optional files: lines (veto lines), addsig (software injections), range file (search ranges).  Please note that same of the parameters have to match those used during input data generation (e.g., dt, overlap, nod).
 
 
-??? note "Bands, segments, overlap (click to expand)"
+#### Bands, segments, overlap
 
-    <br/> Short summary from the [genseg documentation](../input_data/): we analyze narrow-band (0.25-1 Hz) time segments of length being an integer multiple of sidereal day (typically 2-24 days).  
-    Subsequent time segments are labeled by natural numbers. In some contexts (like filenames) those numbers are formatted using pattern DDD (e.g. 009).  
-    Bands are overlapping in frequency to avoid edge effects. Bands are also labeled by natural numbers and in some contexts the 4 digit format is used (e.g., 0027). The general formula for the initial frequency of the band number b is:  
+Short summary from the [genseg documentation](../input_data/): we analyze narrow-band (0.25-1 Hz) time segments of length being an integer multiple of 1 sidereal day (typically 2-24 days). Subsequent time segments are labeled by natural numbers. In some contexts (like filenames) those numbers are formatted using pattern DDD (e.g. 009).  
+Bands are overlapping in frequency to avoid edge effects. Bands are also labeled by natural numbers and in some contexts the 4 digit format is used (e.g., 0027). The general formula for the initial frequency of the band number b is:  
     $fpo(b) = 10 + (1 - overlap) \cdot b \frac{1}{2 \cdot dt}$  
-    where bandwidth B=1/(2dt) and overlap is expressed as a fraction of B. The overlap shuld have the form of $2^{-n}$, to assure that fpo is aligned with fourier bins in the SFDB database (e.g. 0.0625).
+where bandwidth B=1/(2dt) and overlap is expressed as a fraction of B. The overlap shuld have the form of $2^{-n}$, to assure that fpo is aligned with fourier bins in the SFDB database (e.g. 0.0625).
 
 
-??? note "narrowdown (click to expand)"
+#### narrowdown
 
-    <br/> Narrowdown is used to limit the range of frequencies for which the F-statistic is computed. It should be in range [0-0.5] and we define the whole band range to be [-0.5, 0.5]. Narrowdown 0.5 means "use the whole bandwidth". Narrowdown 0.45 means that the band is narrowed by 5% on both sides. If narrowdown < 0, then the frequency range is calculated from overlap in such a way that the overapping part of the band is split in the middle, effectivlly creating two sibling, non-overlapping bands.
-    
-    ```
-         |<------- band1 ----|--->|
-                    |<---|---- band 2 ------->|
-    ```  
-    
-    This is needed to avoid analyzing the same range of frequencies more than once when performing all-sky search over many bands.
+Narrowdown is used to limit the range of frequencies for which the F-statistic is computed. It should be in range [0-0.5] and we define the whole band range to be [-0.5, 0.5]. Narrowdown 0.5 means "use the whole bandwidth". Narrowdown 0.45 means that the band is narrowed by 5% on both sides. If narrowdown < 0, then the frequency range is calculated from overlap in such a way that the overapping part of the band is split in the middle, effectivlly creating two sibling, non-overlapping bands.   
+```
+        |<------- band1 ----|--->|
+                |<---|---- band 2 ------->|
+```  
+This is needed to avoid analyzing the same range of frequencies more than once when performing all-sky search over many bands.
 
-??? note "veto lines"
+#### veto lines
 
-    <br/> Veto lines are used to exclude instrumental lines from the search. The main source of lines are [official line files used by the CW group](https://git.ligo.org/CW/instrumental/aLIGO-lines-combs/). CSV versions of those files should be placed in the direcory `<indir>/lines/`. All files matching the glob pattern `<det>lines*.csv` (e.g. `H1lines-v2.csv`) will be used. These files are used to generate *band* veto files which contain only lines relevant for the current band, both in units of $\pi$ used in our pipeline and in $Hz$. The band veto files are always located in the same directory as trigger files (`ourdir`) and named `vlines_<band>.dat`. There is a separate code `vlinegen` to generate the band veto file from the general ones. It takes as inut the same .ini file as the `search` code: `vlinegen search.ini`. If the band veto file is missing, it will be generated by the search code exactly the same way as `vlinegen` would do it. However `search` will never overwrite this file - to make a new version always use `vlinegen`. In addition to band veto lines, the `vlines_<band>.dat` file also contains a band_veto_fraction value which is needed by the FAP code (as a comment). The `search.ini` file can set relevant flag: `veto_flag`. It will apply the veto lines to the ***search output*** if set to 1 (usually we apply them in the coincidences step).
+Veto lines are used to exclude instrumental lines from the search. The main source of lines are [official line files used by the CW group](https://git.ligo.org/CW/instrumental/aLIGO-lines-combs/). CSV versions of those files should be placed in the direcory `<indir>/lines/`. All files matching the glob pattern `<det>lines*.csv` (e.g. `H1lines-v2.csv`) will be used. These files are used to generate *band* veto files which contain only lines relevant for the current band, both in units of $\pi$ used in our pipeline and in $Hz$. The band veto files are always located in the same directory as trigger files (`ourdir`) and named `vlines_<band>.dat`.  
+There is a separate code `vlinegen` to generate the band veto file from the general ones. It takes as inut the same .ini file as the `search` code: `vlinegen search.ini`. If the band veto file is missing, it will be generated by the search code exactly the same way as `vlinegen` would do it. However `search` will never overwrite this file - to make a new version always use `vlinegen`. In addition to band veto lines, the `vlines_<band>.dat` file also contains a band_veto_fraction value which is needed by the FAP code (as a comment). The `search.ini` file can set relevant flag: `veto_flag`. It will apply the veto lines to the ***search output*** if set to 1 (usually we apply them in the coincidences step).
 
-??? note "range_file (click to expand)"
-
-
-??? note "addsig (click to expand)"
+#### addsig / software injections
 
 
 
-## Example of usage
+## Running
 
 Minimal call to `gwsearch-cascadelake-avx2-float` is as follows (code compiled with the `GNUSINCOS` option): 
 
@@ -159,15 +150,21 @@ HDF5 object                  | data type
 │    ├── data                | compound[] (Trigger[])
 └── ...
 ```
-#### Full h5dump output example
+#### Example content of HDF file with triggers
+
+`h5dump triggers_006_0017_1.h5`
+
 <details>
 <summary>Click to expand</summary>
 ```
-HDF5 "triggers_013_0072_2.h5" {
+HDF5 "triggers_006_0017_1.h5" {
 GROUP "/" {
    ATTRIBUTE "format_version" {
       DATATYPE  H5T_STD_I32LE
       DATASPACE  SIMPLE { ( 1 ) / ( 1 ) }
+      DATA {
+      (0): 2
+      }
    }
    ATTRIBUTE "git_commit" {
       DATATYPE  H5T_STRING {
@@ -177,6 +174,9 @@ GROUP "/" {
          CTYPE H5T_C_S1;
       }
       DATASPACE  SCALAR
+      DATA {
+      (0): "af29493e4e582a9bf2489f53e2df30d9e3108f7f"
+      }
    }
    ATTRIBUTE "ifo" {
       DATATYPE  H5T_COMPOUND {
@@ -192,12 +192,21 @@ GROUP "/" {
             CSET H5T_CSET_ASCII;
             CTYPE H5T_C_S1;
          } "xdatname";
+         H5T_IEEE_F64LE "start_time";
       }
       DATASPACE  SIMPLE { ( 2 ) / ( 2 ) }
-   }
-   ATTRIBUTE "num_threads" {
-      DATATYPE  H5T_STD_I32LE
-      DATASPACE  SIMPLE { ( 1 ) / ( 1 ) }
+      DATA {
+      (0): {
+            "H1",
+            "/work/chuck/virgo/O4/input_data_O4_G02/xdat_O4_6d/006/H1/xdat_006_0017.bin",
+            1.37156e+09
+         },
+      (1): {
+            "L1",
+            "/work/chuck/virgo/O4/input_data_O4_G02/xdat_O4_6d/006/L1/xdat_006_0017.bin",
+            1.37156e+09
+         }
+      }
    }
    ATTRIBUTE "opts" {
       DATATYPE  H5T_COMPOUND {
@@ -206,7 +215,6 @@ GROUP "/" {
          H5T_STD_I32LE "seg";
          H5T_STD_I32LE "band";
          H5T_STD_I32LE "hemi";
-         H5T_STD_I32LE "nod";
          H5T_IEEE_F64LE "thr";
          H5T_IEEE_F64LE "narrowdown";
          H5T_IEEE_F64LE "overlap";
@@ -222,12 +230,6 @@ GROUP "/" {
             CSET H5T_CSET_ASCII;
             CTYPE H5T_C_S1;
          } "outdir";
-         H5T_STRING {
-            STRSIZE H5T_VARIABLE;
-            STRPAD H5T_STR_NULLTERM;
-            CSET H5T_CSET_ASCII;
-            CTYPE H5T_C_S1;
-         } "range_file";
          H5T_STRING {
             STRSIZE H5T_VARIABLE;
             STRPAD H5T_STR_NULLTERM;
@@ -252,8 +254,61 @@ GROUP "/" {
             CSET H5T_CSET_ASCII;
             CTYPE H5T_C_S1;
          } "fstat_norm";
+         H5T_STRING {
+            STRSIZE H5T_VARIABLE;
+            STRPAD H5T_STR_NULLTERM;
+            CSET H5T_CSET_ASCII;
+            CTYPE H5T_C_S1;
+         } "mods";
+         H5T_STRING {
+            STRSIZE H5T_VARIABLE;
+            STRPAD H5T_STR_NULLTERM;
+            CSET H5T_CSET_ASCII;
+            CTYPE H5T_C_S1;
+         } "gtype";
+         H5T_STRING {
+            STRSIZE H5T_VARIABLE;
+            STRPAD H5T_STR_NULLTERM;
+            CSET H5T_CSET_ASCII;
+            CTYPE H5T_C_S1;
+         } "gcenter";
+         H5T_STRING {
+            STRSIZE H5T_VARIABLE;
+            STRPAD H5T_STR_NULLTERM;
+            CSET H5T_CSET_ASCII;
+            CTYPE H5T_C_S1;
+         } "gsizes";
+         H5T_STRING {
+            STRSIZE H5T_VARIABLE;
+            STRPAD H5T_STR_NULLTERM;
+            CSET H5T_CSET_ASCII;
+            CTYPE H5T_C_S1;
+         } "gsteps";
       }
       DATASPACE  SCALAR
+      DATA {
+      (0): {
+            0,
+            0,
+            6,
+            17,
+            0,
+            14.5,
+            1.47262,
+            0.0625,
+            "/work/chuck/virgo/O4/input_data_O4_G02/xdat_O4_6d",
+            ".",
+            "020/grids/grid_020_0017_H1L1.bin",
+            "",
+            "",
+            "",
+            "",
+            "allsky",
+            "26.321649  -8.50e-11 3.86687548714555 0.74835013347064",
+            "16256 0. 0. 0.",
+            "1 1. 1. 1."
+         }
+      }
    }
    ATTRIBUTE "s_range" {
       DATATYPE  H5T_COMPOUND {
@@ -271,6 +326,22 @@ GROUP "/" {
          H5T_STD_I32LE "pst";
       }
       DATASPACE  SCALAR
+      DATA {
+      (0): {
+            [ 1, 2 ],
+            [ 4096, 520192 ],
+            [ -10, 10 ],
+            [ -5, 5 ],
+            [ -153, 63 ],
+            1,
+            1,
+            1,
+            -10,
+            -5,
+            -153,
+            1
+         }
+      }
    }
    ATTRIBUTE "sett" {
       DATATYPE  H5T_COMPOUND {
@@ -300,18 +371,38 @@ GROUP "/" {
          H5T_STD_I32LE "bufsize";
          H5T_STD_I32LE "dd";
          H5T_ARRAY { [16] H5T_IEEE_F64LE } "M";
-         H5T_ARRAY { [5][2] H5T_IEEE_F64LE } "lines";
       }
       DATASPACE  SCALAR
-   }
-   ATTRIBUTE "t_end" {
-      DATATYPE  H5T_STRING {
-         STRSIZE 20;
-         STRPAD H5T_STR_NULLTERM;
-         CSET H5T_CSET_ASCII;
-         CTYPE H5T_C_S1;
+      DATA {
+      (0): {
+            25.9375,
+            0.5,
+            1,
+            81.4851,
+            3.64606e-05,
+            0,
+            6.70414e-10,
+            0.397777,
+            0.917482,
+            1048576,
+            6,
+            1033969,
+            1048576,
+            520192,
+            4096,
+            1,
+            2,
+            2,
+            1,
+            2097152,
+            2,
+            2,
+            9,
+            65536,
+            5,
+            [ 5.99211e-06, 1.16998e-26, -2.346e-17, 2.39069e-15, -7.00372e-06, 7.45542e-12, 0, 0, 0.0026634, 1.47568e-11, -27.1918, 0, 0.000487897, -4.3489e-11, -3.79525, -9.09952 ]
+         }
       }
-      DATASPACE  SCALAR
    }
    ATTRIBUTE "t_start" {
       DATATYPE  H5T_STRING {
@@ -321,14 +412,9 @@ GROUP "/" {
          CTYPE H5T_C_S1;
       }
       DATASPACE  SCALAR
-   }
-   ATTRIBUTE "totsgnl" {
-      DATATYPE  H5T_STD_I32LE
-      DATASPACE  SIMPLE { ( 1 ) / ( 1 ) }
-   }
-   ATTRIBUTE "walltime" {
-      DATATYPE  H5T_IEEE_F64LE
-      DATASPACE  SIMPLE { ( 1 ) / ( 1 ) }
+      DATA {
+      (0): "2026-07-31 13:41:45"
+      }
    }
    DATASET "triggers" {
       DATATYPE  H5T_COMPOUND {
@@ -338,44 +424,30 @@ GROUP "/" {
          H5T_IEEE_F32LE "ra";
          H5T_IEEE_F32LE "dec";
          H5T_IEEE_F32LE "fdot";
-         H5T_VLEN { H5T_IEEE_F32LE } "ffstat";
+         H5T_VLEN { H5T_IEEE_F32LE} "ffstat";
       }
-      DATASPACE  SIMPLE { ( 4952 ) / ( H5S_UNLIMITED ) }
-   }
-}
-}
+      DATASPACE  SIMPLE { ( 818 ) / ( H5S_UNLIMITED ) }
+      DATA {
+      (0): {
+            -8,
+            0,
+            -136,
+            0.264512,
+            0.388286,
+            -8.4801e-10,
+            (0.154192, 16.0539, 0.56044, 14.6618, 0.21382, 15.7866, 0.769385, 15.5331)
+         },
+      (1): {
+            -8,
+            0,
+            -135,
+            0.264512,
+            0.388286,
+            -8.38517e-10,
+            (0.812311, 15.5455, 0.44696, 14.9664, 0.613565, 15.4472, 0.310226, 15.3944, 0.315984, 15.7549)
+         },
+         .... < more triggers > ...
+      }
+      
 ```
 </details>
-
-
-Binary output files, containing trigger candidate events above an arbitrary threshold (option `-threshold` for the $\mathcal{F}$-statistic, default 20), are written to the `output_dir` directory. There are two output files for every input data sequence: `triggers_nnn_bbbb_1.bin` and
-`triggers_nnn_bbbb_2.bin`,  where  `1` and  `2` correspond to the northern and southern ecliptic hemisphere. Each trigger (candidate) event occupies `40` consecutive bytes (5 double numbers), with the following meaning:
-
-Record no.            | 
---------------------- | ---------------------------- 
-1                     | frequency [radians, between 0 and $\pi$] above `fpo`  
-2                     | spindown [$\mathrm{Hz/s}$]  
-3                     | declination [radians, between $\pi/2$ and $-\pi/2$]
-4                     | right ascension [radians, between 0 and $2\pi$]
-5                     | signal-to-noise ratio
-
-For the example above, the first 10 triggers from `triggers_001_1234_2.bin` are 
-
-```bash
-3.05617018e+00 -3.42376198e-08 -7.68007347e-02 2.59248668e+00 5.06667333e+00 
-1.18243015e+00 -3.20762991e-08 -7.68007347e-02 2.59248668e+00 5.05528873e+00 
-1.08103361e-01 -2.77536578e-08 -7.68007347e-02 2.59248668e+00 5.07085254e+00 
-1.90022435e+00 -2.77536578e-08 -7.68007347e-02 2.59248668e+00 5.15191593e+00 
-1.90000217e+00 -2.55923371e-08 -7.68007347e-02 2.59248668e+00 5.42638039e+00 
-2.09224664e+00 -2.34310165e-08 -7.68007347e-02 2.59248668e+00 5.20879551e+00 
-2.38731576e+00 -2.12696958e-08 -7.68007347e-02 2.59248668e+00 5.31983396e+00 
-3.00543165e+00 -1.91083751e-08 -7.68007347e-02 2.59248668e+00 5.29454616e+00 
-7.49333983e-01 -1.26244131e-08 -7.68007347e-02 2.59248668e+00 5.08724856e+00 
-2.08710778e-01  3.43510887e-10 -7.68007347e-02 2.59248668e+00 5.17537018e+00 
-```
-
-### Auxiliary output files
-
-* `wisdom-hostname.dat` - performance-testing file created by the `FFTW`. The `hostname` variable is determined by a call to `gethostname()`, 
-
-* `state_nnn_bbbb.dat` - checkpointing file containing the last grid point visited. The search can  be safely restarted, calculations will continue  from the last grid position saved to this file. After successful termination, checkpoint file is left empty.
