@@ -367,6 +367,12 @@ int extract_band_vlines(Search_settings *sett, Command_line_opts *opts, char *ba
 
     sett->nvlines_all_inband = j;
 
+    for(i=0; i<sett->numlines_band; i++){
+        fl = sett->lines[i][0]/M_PI*sett->B + sett->fpo;
+        fr = sett->lines[i][1]/M_PI*sett->B + sett->fpo;
+        fprintf(data, "   %.15f  %.15f  %.15f  %.15f  %s\n",
+            sett->lines[i][0], sett->lines[i][1], fl, fr, "narrowdown");
+    }
     // scale veto lines to radians (narrowdown lines are already scaled)
     for (i=sett->numlines_band; i<sett->nvlines_all_inband; i++) {
         fl = sett->lines[i][0];
