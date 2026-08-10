@@ -7,7 +7,7 @@
 #define TOSTRA(x) #x
 #define TOSTR(x) TOSTRA(x)
 
-#define TINY 1.0e-20
+#define TINY 1.0e-10
 #define NINTERP 3  /* degree of the interpolation polynomial - do not change!!! */
 #define NAVFSTAT 4096
 #define round(x) floor((x)+0.5)

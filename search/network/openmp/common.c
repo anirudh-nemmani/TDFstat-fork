@@ -490,8 +490,11 @@ void read_band_vlines(Search_settings *sett, Command_line_opts *opts, char *band
     const size_t vf_taglen = sizeof(vf_tag) - 1;
     float vf = -1.;    // negative until read from the file
 
-    i=0; // index of line in band
-    if(opts->narrowdown < 0.5*M_PI) i = sett->numlines_band;
+    // index of a line in band
+    // if present narrowdown lines are stored first (i=0,1)
+    i=0;
+
+    //if(opts->narrowdown < 0.5*M_PI) i = sett->numlines_band;
 
     if ((data = fopen(band_vl_file, "r")) != NULL) {
         lnum = 0;
@@ -510,6 +513,26 @@ void read_band_vlines(Search_settings *sett, Command_line_opts *opts, char *band
             if (*line == '#') continue;
             // Columns are whitespace separated, as written by extract_band_vlines():
             // 1 - fl [rad], 2 - fr [rad], 3 - fl [Hz], 4 - fr [Hz], 5 - line info
+            // Check if the first two lines are narrowdown and compare with the values set in settings
+            if (strstr(line, "narrowdown") != NULL) {
+                if(opts->narrowdown >= 0.5*M_PI) {
+                    printf("Narrowdown is disabled - unexpected narrowdown line %d in %s:\n%s Aborting!\n", lnum, band_vl_file, line);
+                    exit(EXIT_FAILURE);
+                } else {
+                    double fl, fr;
+                    if (sscanf(line, "%lf %lf", &fl, &fr) != 2) {
+                        printf("Can't parse narrowdown line %d of %s:\n%s Aborting!\n", lnum, band_vl_file, line);
+                        exit(EXIT_FAILURE);
+                    }
+                    if (fabs(fl - sett->lines[i][0]) > TINY || fabs(fr - sett->lines[i][1]) > TINY) {
+                        printf("Narrowdown line %d of %s does not match settings:\n%s Aborting!\n", lnum, band_vl_file, line);
+                        exit(EXIT_FAILURE);
+                    } else {
+                        ++i;
+                        continue;
+                    }
+                }
+            }
             if (sscanf(line, "%lf %lf", &sett->lines[i][0], &sett->lines[i][1]) != 2) {
                 printf("Can't parse line %d of %s:\n%s Aborting!\n", lnum, band_vl_file, line);
                 exit(EXIT_FAILURE);
