@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/param.h>
 //#include <dirent.h>
+#include <libgen.h>
 
 #include "cdefs.h"
 #include "../search/network/openmp/struct.h"
@@ -44,14 +45,14 @@ int main (int argc, char* argv[]) {
     Coinc_Trigger *ctrigs=NULL;        // triggers struct for coincidences, assembled from all time segments
     Search_params search_par = {0};    // selected fields from Search_settings
     int seginfo[MAX_NSEG][3];   // Info about candidates in frames:
-                                // [0] frame number, 
+                                // [0] frame number,
                                 // [1] good, inband triggers at reference time
                                 // [2] unique triggers, max. one per coincidence cell at reference time
-                                // [3] veto fraction (not used yet)
-                                // [4] starting time of the segment (not used yet)
 
     int i, j, k, iseg;
-     
+    double vf = 0.0; // veto fraction
+    double t0[MAX_NSEG]; // starting time of each segment, not used yet
+
     if (argc > 1) {
         strcpy (ini_fname, argv[1]);
     } else if (argc > 2) {
@@ -60,13 +61,17 @@ int main (int argc, char* argv[]) {
         printf("ERROR: missing input file name. Call: \"<executable> search.ini\" \n");
         exit(EXIT_FAILURE);
     }
-     
+
     read_coinc_ini(ini_fname, &copts);
-     
+
     if (ctrigs != NULL) {
         free(ctrigs);
         ctrigs = NULL;
     }
+
+    // read band veto file from the same location as the first trigger file
+    char veto_fname[FILE_NAME_LEN], *veto_dirname;
+    veto_dirname = dirname(strdup(copts.trig_files[0]));
 
     // read triggers from input files,
     // select good candidates, and store them in ctrigs
@@ -74,8 +79,8 @@ int main (int argc, char* argv[]) {
     for(iseg=0; iseg<copts.nseg; iseg++) {
         printf("> segment %d\n", iseg);
         read_triggers_file(copts.trig_files[iseg], copts.trig_dset, &sgnlv, &search_par);
-          
-        // initialize ctrigs
+
+        // initialize
         if (iseg==0) {
             ctrigs = (Coinc_Trigger *) malloc (sizeof(Coinc_Trigger) * search_par.sgnlv_size);
             for (j=0; j<search_par.sgnlv_size; j++) {
@@ -89,11 +94,15 @@ int main (int argc, char* argv[]) {
                 // and each element contains (hvl_t ffstat) for the given segment
                 ctrigs[j].ffstat = (hvl_t *) malloc (sizeof(hvl_t) * copts.nseg);
             }
+            if (search_par.nvlines_all_inband > 0) {
+                snprintf(veto_fname, FILE_NAME_LEN, "%s/vlines_%04d%s.dat", veto_dirname, search_par.band, search_par.label);
+                vf = read_vlines_file(veto_fname, &search_par);
+            }
         }
 
         seginfo[iseg][0] = search_par.seg;
-        // select good candidates: 
-        // apply Fstat threshold, shift in frequency to reference time, 
+        // select good candidates:
+        // apply Fstat threshold, shift in frequency to reference time,
         // narrowdown, reject triggers in lines;
         // return the number of good candidates in the segment
         seginfo[iseg][1] = select_goodcands(iseg, &copts, &search_par, sgnlv, ctrigs);
@@ -115,11 +124,11 @@ int main (int argc, char* argv[]) {
     } // iseg
 
 
-    /* ----------------------------------------------------------------------- 
+    /* -----------------------------------------------------------------------
      * map between search and coincidences grids in m,n,s dimensions i.e.
      * ctrigs/sgnlv (m,n,s) -> coincidences (mc,nc,sc)
      * ------------------------------------------------------------------------- */
-     
+
     // 1 means no scaling - original search grid
     int scm = copts.scalem;
     int scn = copts.scalen;
@@ -136,7 +145,7 @@ int main (int argc, char* argv[]) {
     init_coin_hdf(coin_fname, &copts, &search_par);
 
     // the last 4 bits of ish encode the shifts in m,n,s,f dimensions, respectively;
-    // check all 16 combinations of shifts 
+    // check all 16 combinations of shifts
     // unless a specific shift is requested via copts.shift,
     int ish, ish0 = 0, ish1 = 15;
     if (copts.shift != NULL && strlen(copts.shift) == 4) {
@@ -147,18 +156,18 @@ int main (int argc, char* argv[]) {
     //exit(0);
     /* ---------------------------------------------------------
      * main loop over shifts
-     * --------------------------------------------------------- */       
+     * --------------------------------------------------------- */
     for (ish=ish0; ish<=ish1; ish++) {
         int shift[4];
-        for (i=0; i<4; i++) 
+        for (i=0; i<4; i++)
             shift[i] = (ish >> i) & 1;
         printf("Shift: m=%d, n=%d, s=%d, f=%d\n", shift[3], shift[2], shift[1], shift[0]);
-        
+
         float shiftm = shift[3]*0.5;
         float shiftn = shift[2]*0.5;
         float shifts = shift[1]*0.5;
         float shiftf = shift[0]*0.5;
-     
+
         // max number of ctrigs elements (mns) in one coincidences cell (mc,nc,sc)
         int ictrigs_size = scm*scn*scs;
         // ~ number of (mc,nc,sc) coincidence grid cells;
@@ -210,23 +219,23 @@ int main (int argc, char* argv[]) {
         free(keys);
 
         int nccells = iccell;
-        printf("   nccels/maxccells: %d/%d sgnlv_size=%ld  ", 
+        printf("   nccels/maxccells: %d/%d sgnlv_size=%ld  ",
             nccells, maxccells, search_par.sgnlv_size);
-#if 0     
+#if 0
         for(int ic=0; ic<nccells; ic++) {
-            printf("Cell %d: mc=%d, nc=%d, sc=%d, nctrigs=%d, ictrigs=", 
+            printf("Cell %d: mc=%d, nc=%d, sc=%d, nctrigs=%d, ictrigs=",
                 ic, s2c_mns[ic].mc, s2c_mns[ic].nc, s2c_mns[ic].sc, s2c_mns[ic].nctrigs);
             for(int j=0; j<s2c_mns[ic].nctrigs; j++)
                 printf("%d(%d) ", s2c_mns[ic].ictrigs[j], ctrigs[s2c_mns[ic].ictrigs[j]].iccell);
             printf("\n");
         }
-#endif     
-        
+#endif
+
         /* -------------------------------------------------------------------------
         * search for coincidences between segments
         * -------------------------------------------------------------------------*/
-        
-        int ncoi = nccells; 
+
+        int ncoi = nccells;
         // all coincidences, to be written to HDF file
         // assume one coinc. per mns coinc. cell, reallocate if needed;
         Coincidence *coi = (Coincidence *) malloc(sizeof(Coincidence) * ncoi);
@@ -237,7 +246,7 @@ int main (int argc, char* argv[]) {
         max_coi.trig_mns = (int *) malloc(sizeof(int) * copts.nseg);
         max_coi.n_ccell_trigs = (short *) malloc(sizeof(short) * copts.nseg);
         max_coi.avg_snr = 0.f;
-     
+
         int icoi = 0; // coincidence counter
         int nfccells = search_par.nfftf/scf; // number of frequency cells in the coincidences grid
 
@@ -258,11 +267,11 @@ int main (int argc, char* argv[]) {
         short tmp_n_ccell_trigs[MAX_NSEG];
 
         const float inv_fbin = (float)nfccells / (float)M_PI;
-     
+
         // initialise unique-trigger counters (filled in pass 2 below)
-        for (iseg=0; iseg<copts.nseg; iseg++) 
+        for (iseg=0; iseg<copts.nseg; iseg++)
             seginfo[iseg][2] = 0;
-     
+
         // loop over mns cells
         for (int imns=0; imns<nccells; imns++) {
             int ndirty = 0;
@@ -376,7 +385,7 @@ int main (int argc, char* argv[]) {
             shift_str[ii] = '0' + shift[3-ii];
         shift_str[4] = '\0';
         write_coi_hdf(coin_fname, &copts, coi, icoi, shift_str, seginfo);
-        
+
         printf("  icoi(w>=%d)=%d\n", copts.mincoin, icoi);
         if (max_coi.w > 0) {
             for(i=0; i<MIN(3, icoi); i++){
@@ -388,7 +397,7 @@ int main (int argc, char* argv[]) {
                     i, coi[i].w, coi[i].avg_snr, coi[i].avg_f, ff,
                     coi[i].avg_fdot, coi[i].avg_ra, coi[i].avg_dec, coi[i].shift);
             }
-#if 0            
+#if 0
             printf("   maxcoi: w=%d  avg_snr=%.4f  avg_f=%.6f  avg_fdot=%.4e"
                 "  avg_ra=%.6f  avg_dec=%.6f shift=%s\n",
                 max_coi.w, max_coi.avg_snr, max_coi.avg_f,
@@ -429,7 +438,7 @@ int main (int argc, char* argv[]) {
     } // ishift
 
     printf("\n");
-    
+
     // write HDF file with ctrigs, if needed
     if (copts.write_ctrigs) {
         char ctrigs_fname[FILE_NAME_LEN];
@@ -466,13 +475,24 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
     float *ffbuffer = (float *) malloc(sizeof(float) * buffer_size);
 
     for (j=0; j<search_par->sgnlv_size; j++) {
-        // check if ffstat is null? 
+        // check if ffstat is null?
         int ic = 0; // "good" triggers counter
         for (itrig=0; itrig<sgnlv[j].ffstat.len/2; itrig++) {
             float f = ((float *)sgnlv[j].ffstat.p)[2*itrig];
             float fstat = ((float *)sgnlv[j].ffstat.p)[2*itrig+1];
             // skip triggers below threshold
             if (fstat < copts->cthr) continue;
+#if 1
+            // narrowdown is included in the vlines
+            int isline = 0;
+            for(int il=0; il<search_par->nvlines_all_inband; il++){
+                if( f >= search_par->lines[il][0] && f <= search_par->lines[il][1] ) {
+                    isline = 1;
+                    break;
+                }
+            }
+            if (isline) continue;
+#else
             // Narrowing-down the band around center
             if( (f <= M_PI_2 - search_par->narrowdown) ||
                 (f >= M_PI_2 + search_par->narrowdown) )  continue;
@@ -485,9 +505,10 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
                 }
             }
             if (isline) continue;
+#endif
             // spindown in linear units
             float fdot_lin = sgnlv[j].fdot*M_PI*pow(search_par->dt,2);
-            // shifting f to the reference segment (copts->refr) due to spindown 
+            // shifting f to the reference segment (copts->refr) due to spindown
             f = f + 2.*fdot_lin*(search_par->N)*(copts->refr - search_par->seg);
             //f = f + sgnlv[j].fdot*search_par->dt*(search_par->N)*(copts->refr - search_par->seg) * 2.*M_PI*search_par->dt;
             if((f<0) || (f>M_PI)) continue; // skip triggers shifted out of the band
@@ -502,7 +523,7 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
         ctrigs[j].ffstat[iseg].len = 2*ic;
         ctrigs[j].ffstat[iseg].p = (float *) malloc(sizeof(float) * ctrigs[j].ffstat[iseg].len);
         //printf("before goodcands j=%d  buffer_size=%d\n", j, buffer_size);
-        memcpy(ctrigs[j].ffstat[iseg].p, ffbuffer, 
+        memcpy(ctrigs[j].ffstat[iseg].p, ffbuffer,
             sizeof(float) * ctrigs[j].ffstat[iseg].len);
         ntrig_seg += ic;
     }

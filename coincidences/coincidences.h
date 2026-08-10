@@ -45,6 +45,7 @@ typedef struct {
         vfrac; // Veto fraction of the band
 
     char *grid_file; //just to verify it doesn't change
+    char *label;
 
 } Search_params;
 
@@ -88,3 +89,4 @@ int init_coin_hdf(const char *coin_fname, Coinc_opts *copts,
 int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
                   Coincidence *coi, int icoi, const char *shift_str,
                   int seginfo[][3]);
+float read_vlines_file(const char *veto_fname, Search_params *search_par);

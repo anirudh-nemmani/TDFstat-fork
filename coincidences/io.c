@@ -27,6 +27,7 @@ typedef struct {
     double overlap;
     double narrowdown;
     char  *grid_file;   /* variable-length string – HDF5 allocates this */
+    char  *label;       /* variable-length string – HDF5 allocates this */
 } Opts_partial;
 
 typedef struct {
@@ -155,7 +156,7 @@ void read_coinc_ini(char *ini_fname, Coinc_opts *copts)
 
 
 /* =========================================================================
- * read_triggers_file - Read triggers from HDF5 file produced by search 
+ * read_triggers_file - Read triggers from HDF5 file produced by search
  * into sgnlv array.
  * Return size of the array == number of (m,n,s) grid points.
  * ========================================================================= */
@@ -211,6 +212,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
     H5Tinsert(opts_tid, "overlap", offsetof(Opts_partial, overlap), H5T_NATIVE_DOUBLE);
     H5Tinsert(opts_tid, "narrowdown", offsetof(Opts_partial, narrowdown), H5T_NATIVE_DOUBLE);
     H5Tinsert(opts_tid, "grid_file", offsetof(Opts_partial, grid_file),  vstr_t);
+    H5Tinsert(opts_tid, "label", offsetof(Opts_partial, label),  vstr_t);
 
     hid_t sett_tid = H5Tcreate(H5T_COMPOUND, sizeof(Sett_partial));
     H5Tinsert(sett_tid, "fpo", offsetof(Sett_partial, fpo), H5T_NATIVE_DOUBLE);
@@ -223,7 +225,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
     H5Tinsert(sett_tid, "nvlines_all_inband", offsetof(Sett_partial, nvlines_all_inband), H5T_NATIVE_INT);
 
     printf("   [file %s]\n", filename);
-    
+
     Opts_partial op = {0};
     hid_t opts_attr = H5Aopen(file, "opts", H5P_DEFAULT);
     if (opts_attr >= 0) {
@@ -240,10 +242,12 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
             search_par->overlap    = op.overlap;
             search_par->narrowdown = op.narrowdown;
             search_par->grid_file  = op.grid_file ? strdup(op.grid_file) : NULL;
-            printf ("   [getting opts: band=%d, seg=%d, hemi=%d, overlap=%.2f, narrowdown=%.2f, grid_file=%s]\n",
+            search_par->label  = op.label ? strdup(op.label) : NULL;
+            printf ("   [getting opts: band=%d, seg=%d, hemi=%d, overlap=%.2f, narrowdown=%.2f, grid_file=%s, label=%s]\n",
                 search_par->band, search_par->seg, search_par->hemi,
                 search_par->overlap, search_par->narrowdown,
-                search_par->grid_file ? search_par->grid_file : "NULL");
+                search_par->grid_file ? search_par->grid_file : "NULL",
+                search_par->label ? search_par->label : "NULL");
         } else {
             // compare op with searh par
             if (search_par->band != op.band ||
@@ -293,7 +297,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
                 search_par->nod, search_par->N, search_par->B, search_par->fpo,
                 search_par->nvlines_all_inband);
         } else {
-            // compare sp with searh par
+            // compare sp with search par
             if (search_par->nod != sp.nod ||
                 search_par->N != sp.N )
             {
@@ -314,6 +318,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
 
     //Read 'lines' from 'sett' (only present when nvlines_all_inband > 0 )
     if (init_search_par && search_par->nvlines_all_inband > 0) {
+#if 0
         hsize_t lines_dims[2] = {(hsize_t)search_par->nvlines_all_inband, 2};
         hid_t lines_arr_t = H5Tarray_create2(H5T_NATIVE_DOUBLE, 2, lines_dims);
 
@@ -347,6 +352,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
             exit(EXIT_FAILURE);
         }
         H5Tclose(lines_tid);
+#endif
     }
 
     /* ------------------------------------------------------------------ */
@@ -376,7 +382,7 @@ size_t read_triggers_file(const char *filename, const char *t_dset_name,
             sgnlv_size, search_par->sgnlv_size);
         exit(EXIT_FAILURE);
     }
-    
+
     if (sgnlv_size == 0) {
         *sgnlv = NULL;
         H5Sclose(t_space);
@@ -659,7 +665,7 @@ int write_ctrigs_hdf(const char *ctrigs_fname, Coinc_opts *copts,
         fprintf(stderr, "Error: cannot write 'seginfo' dataset to %s\n", ctrigs_fname);
     H5Dclose(si_dset);
     H5Sclose(si_space);
-    
+
     /* ------------------------------------------------------------------ */
     /* Release shared resources and close file                            */
     /* ------------------------------------------------------------------ */
@@ -907,3 +913,59 @@ int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
         dset_name, coin_fname, icoi);
     return EXIT_SUCCESS;
 } /* write_coi_hdf */
+
+
+float read_vlines_file(const char *veto_fname, Search_params *search_par)
+{
+    int i, lnum;
+    char line[MAXLINE];
+    FILE *data;
+
+    const char vf_tag[] = "#band_veto_fraction=";
+    const size_t vf_taglen = sizeof(vf_tag) - 1;
+    float vf = -1.;    // negative until read from the file
+
+    i=0;
+    if ((data = fopen(veto_fname, "r")) != NULL) {
+        while (fgets(line, MAXLINE, data) != NULL) {
+            // Skip comments or read veto fraction
+            if (*line == '#') {
+                if (!strncmp(line, vf_tag, vf_taglen)) {
+                    if (sscanf(line + vf_taglen, "%f", &vf) != 1) {
+                        printf("Can't read veto fraction from\nfile: %s\nline %s\n Aborting!\n",
+                            veto_fname, line);
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                continue;
+            }
+
+            // sanity check: number of non-comment lines in the vlines.dat file = nvlines_all_inband
+            if (i >= search_par->nvlines_all_inband) {
+                printf("Number of entries in the vlines.dat is larger then nvlines_all_inband! Aborting\n");
+                exit(EXIT_FAILURE);
+            }
+
+            if (sscanf(line, "%lf %lf", &search_par->lines[i][0], &search_par->lines[i][1]) != 2) {
+                printf("Can't parse line %s in file:\n%s\nAborting!\n", line, veto_fname);
+                exit(EXIT_FAILURE);
+            }
+            i++;
+        } // while
+    } else {
+        printf("Can't open file %s\nAborting!\n", veto_fname);
+        exit(EXIT_FAILURE);
+    }
+
+    printf("   [read_vlines_file: read %d lines from %s, veto fraction = %f]\n",
+        i, veto_fname, vf);
+    printf("   [");
+    for(size_t i = 0; i < (size_t)search_par->nvlines_all_inband; i++) {
+        printf("line[%zu]=(%f, %f)  ", i,
+            search_par->lines[i][0], search_par->lines[i][1]);
+    }
+    printf("]\n");
+
+    return vf;
+
+} // read_vlines_file
