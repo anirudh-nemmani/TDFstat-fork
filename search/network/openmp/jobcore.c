@@ -64,7 +64,7 @@ void search( Search_settings *sett,
           sett->bufsize = sett->nfftf;
      }
      printf("Triggers buffer size per spindown = %ld bytes\n", sett->bufsize*sizeof(float));
-     
+
      // max buffer size for (f, fstat) pairs = 2*nfftf/2
      // sett->bufsize = sett->nfftf;
      // initialize ffstat
@@ -95,8 +95,11 @@ void search( Search_settings *sett,
           if (! opts->checkp_flag) remove(outname);
           totsgnl = 0;
 
+          // overwrite value from ini file to store actual hemi in the HDF file in case hemi=0
+          opts->hemi=pm;
+
           hdfout_init(outname, opts, sett, s_range, sgnlv);
-          
+
           /* Two main loops over sky positions */
 
           // imm & inn allow to transform loop indices from float to int
@@ -111,7 +114,7 @@ void search( Search_settings *sett,
                     nn = s_range->nst + inn*s_range->nstep;
 
                     int fnum_old = *FNum;  // number of records already written to file
-                    
+
                     /* Loop over spindowns is inside job_core() */
                     status = job_core(
                          pm,           // hemisphere
@@ -138,9 +141,9 @@ void search( Search_settings *sett,
                          //exit(EXIT_SUCCESS);
                          hdfout_extend(outname, sgnlv, nrec);
                     }
-                    
+
                     sgnlc=0;
-                    
+
                     if(opts->checkp_flag) {
                          ftruncate(fileno(state), 0);
                          fprintf(state, "%d %f %f %f %d\n", pm, mm, nn+1, s_range->sst, *FNum);
@@ -168,7 +171,7 @@ void search( Search_settings *sett,
           printf("\n### Total number of triggers in %s = %ld\n\n", outname, totsgnl);
           sgnlc=0;
           hdfout_finalize(outname, totsgnl, time_elapsed, nthreads);
-          
+
      } // for pm
 
      if (opts->checkp_flag) {
@@ -184,7 +187,7 @@ void search( Search_settings *sett,
      free(sgnlv);
 
      printf("\nEND\n");
-     
+
 } //search
 
 
@@ -265,7 +268,7 @@ int job_core(
      printf("  het0=%.8g    nnmm=%.8g      m0=%.8g   oms=%.8g\n", het0,
      nn*sett->M[8] + mm*sett->M[12], sett->M[0], sett->oms);
      */
-   
+
      // Nyquist frequency
      int nyqst = (sett->nfft)/2 + 1;
 
@@ -516,7 +519,7 @@ int job_core(
 
           /* select triggers */
           int itrig=0;
-          
+
 #define MAX_ALG 3
 #if MAX_ALG == 1
           int dd = sett->dd;
@@ -612,7 +615,7 @@ int job_core(
 
      } // for ss
 
-     printf("  ntrig=%d, buffer usage: [max=%d/%d=%.2f%%] [mean=%.2f%%]\n", *sgnlc, 
+     printf("  ntrig=%d, buffer usage: [max=%d/%d=%.2f%%] [mean=%.2f%%]\n", *sgnlc,
           max_triggers_per_spindown, sett->bufsize/2, (float)max_triggers_per_spindown*100/(sett->bufsize/2),
           (float)(*sgnlc)*100/(sett->bufsize/2*iss_size) );
 #ifndef VERBOSE
@@ -621,7 +624,7 @@ int job_core(
 
 #if TIMERS>2
      //printf("\nTotal spindown loop time: %e s, mean spindown cpu-time: %e s (%d runs)\n",
-     printf("  [Perf] Spindown loop cputime: %e s, <cputime/ns>: %e s (ns: %d)\n",          
+     printf("  [Perf] Spindown loop cputime: %e s, <cputime/ns>: %e s (ns: %d)\n",
           spindown_timer, spindown_timer/spindown_counter, spindown_counter);
 #endif
 
