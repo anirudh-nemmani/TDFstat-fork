@@ -253,9 +253,9 @@ int main (int argc, char* argv[]) {
         // Working arrays: best trigger per (iseg, fic) cell.
         // Allocated once and reset via dirty list – never memset entirely.
         int   *best_cidx_cell = malloc(copts.nseg * nfccells * sizeof(int));
-        float *best_snr_cell  = malloc(copts.nseg * nfccells * sizeof(float));
+        float *best_snr_cell  = calloc(copts.nseg * nfccells, sizeof(float));
         float *best_f_cell    = malloc(copts.nseg * nfccells * sizeof(float));
-        short *n_trigs_cell   = calloc(copts.nseg * nfccells,  sizeof(short));
+        short *n_trigs_cell   = calloc(copts.nseg * nfccells, sizeof(short));
         for (int ii=0; ii<copts.nseg*nfccells; ii++)
             best_cidx_cell[ii] = -1;
         // Dirty list: touched (iseg*nfccells + fic) indices this mns cell.
@@ -471,7 +471,7 @@ int select_goodcands(int iseg, Coinc_opts *copts, Search_params *search_par,
 
     int i, j, k, itrig;
     int ntrig_seg = 0;
-    int buffer_size = 2048; // initial buffer for ffdot shifts, will be reallocated if needed
+    int buffer_size = 2048; // initial buffer for ffstat
     float *ffbuffer = (float *) malloc(sizeof(float) * buffer_size);
 
     for (j=0; j<search_par->sgnlv_size; j++) {
