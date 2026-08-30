@@ -21,7 +21,7 @@ void detector_array_free_owned(Detector_settings *arr,
                                Fisher_settings *sett);
 
 void perturb_params(Signal_params *out,
-                    Signal_params *base,
+                    const Signal_params *base,
                     ParamIndex p,
                     double dp);
 
