@@ -1,15 +1,11 @@
-#include <H5Epublic.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/param.h>
-//#include <dirent.h>
 #include <libgen.h>
+#include <H5Tpublic.h>
 
 #include "cdefs.h"
 #include "../search/network/openmp/struct.h"
@@ -161,7 +157,7 @@ int main (int argc, char* argv[]) {
         int shift[4];
         for (i=0; i<4; i++)
             shift[i] = (ish >> i) & 1;
-        printf("Shift: m=%d, n=%d, s=%d, f=%d\n", shift[3], shift[2], shift[1], shift[0]);
+        printf("\n>>> Shift: m=%d, n=%d, s=%d, f=%d <<<\n", shift[3], shift[2], shift[1], shift[0]);
 
         float shiftm = shift[3]*0.5;
         float shiftn = shift[2]*0.5;
@@ -187,7 +183,9 @@ int main (int argc, char* argv[]) {
             keys[j].nc   = (int)floorf(ctrigs[j].n / scn - shiftn);
             keys[j].sc   = (int)floorf(ctrigs[j].s / scs - shifts);
             keys[j].orig = j;
+            //printf("keys[%d].ms=%d, ctrigs[%d].s=%f\n", j, keys[j].nc, j, ctrigs[j].n);
         }
+
         qsort(keys, search_par.sgnlv_size, sizeof(TrigKey), cmp_trig_key);
 
         for (int jstart=0; jstart<search_par.sgnlv_size; ) {
@@ -249,6 +247,9 @@ int main (int argc, char* argv[]) {
 
         int icoi = 0; // coincidence counter
         int nfccells = search_par.nfftf/scf; // number of frequency cells in the coincidences grid
+        int n_ccell_total = nccells * nfccells; // total 4D (m,n,s,f) coincidence cells
+        printf("   n_ccell_total = (%d mns x %d f) = %d\n",
+               nccells, nfccells, n_ccell_total);
 
         // Working arrays: best trigger per (iseg, fic) cell.
         // Allocated once and reset via dirty list – never memset entirely.
@@ -384,9 +385,9 @@ int main (int argc, char* argv[]) {
         for (int ii=0; ii<4; ii++)
             shift_str[ii] = '0' + shift[3-ii];
         shift_str[4] = '\0';
-        write_coi_hdf(coin_fname, &copts, coi, icoi, shift_str, seginfo);
 
-        printf("  icoi(w>=%d)=%d\n", copts.mincoin, icoi);
+
+        printf("   Best coincidences:\n");
         if (max_coi.w > 0) {
             for(i=0; i<MIN(3, icoi); i++){
             //for(i=0; i<icoi; i++){
@@ -419,7 +420,66 @@ int main (int argc, char* argv[]) {
             printf("No coincidences above mincoin=%d found.\n", copts.mincoin);
         }
 
-        // free per-shift allocations before the next shift iteration
+        // initialize FAP, even if CALC_FAP is not defined,
+        // write_coi_hdf() will work properly
+        Fap_t FAP;
+        FAP.fap.p = NULL;
+
+#define CALC_FAP
+#ifdef CALC_FAP
+        // calculate False Alarm Probability for  mincoin < ncoinc < max_coi.w
+
+        double Nc = round((1.-vf) * n_ccell_total);
+        int nseg = copts.nseg;
+        int mincoin = copts.mincoin;
+        double maxcomb = 1.e9;
+        int *Nku = (int *)malloc( (nseg+1)*sizeof(int));
+
+        printf("FAP calculation\n");
+        printf("   Nc=%le, nseg=%d, mincoin=%d, maxcomb=%le\n   (iseg Nku):", Nc, nseg, mincoin, maxcomb);
+        for(i=0; i<copts.nseg; i++){
+            Nku[i] = seginfo[i][2];
+            printf("   %d %d", i+1, Nku[i]);
+        }
+        printf("\n");
+
+        FAP.fap.p = (double *)calloc(nseg+1, sizeof(double));
+        FAP.fap.len = nseg+1;
+
+        double *fapptr = (double *)FAP.fap.p;
+        FalseAlarmProb(mincoin, nseg, Nc, &Nku[0], maxcomb, fapptr);
+
+        printf("   FAP results:\n");
+        printf("   %04d %d %s %d ", search_par.band, search_par.hemi, shift_str, nseg);
+
+        // critical multiplicity for FAP < 0.01 and FAP < 0.001
+        FAP.crit_mul_0_01 = nseg;
+        FAP.crit_mul_0_001 = nseg;
+        for(i=mincoin; i<=nseg; i++) {
+            if (fapptr[i] > 0.01 && fapptr[i+1] <= 0.01) {
+                FAP.crit_mul_0_01 = i+1;
+            }
+            if (fapptr[i] > 0.001 && fapptr[i+1] <= 0.001) {
+                FAP.crit_mul_0_001 = i+1;
+            }
+            printf("%d %le ", i, fapptr[i]);
+        }
+        printf("\n   crit_mul_0_01=%d   crit_mul_0_001=%d\n",
+            FAP.crit_mul_0_01, FAP.crit_mul_0_001);
+        fflush(stdout);
+
+        FAP.ncoinc_min = mincoin;
+        FAP.ncoinc_max = nseg;
+#endif
+
+        // write coincidences to HDF5 file
+        write_coi_hdf(coin_fname, &copts, coi, icoi, shift_str, seginfo, &FAP);
+
+#ifdef CALC_FAP
+        free(FAP.fap.p);
+#endif
+
+        // free per-shift allocations
         for (i=0; i<maxccells; i++)
             free(s2c_mns[i].ictrigs);
         free(s2c_mns);

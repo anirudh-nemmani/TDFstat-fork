@@ -821,7 +821,7 @@ int init_coin_hdf(const char *coin_fname, Coinc_opts *copts,
  * ========================================================================= */
 int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
                   Coincidence *coi, int icoi, const char *shift_str,
-                  int seginfo[][3])
+                  int seginfo[][3], Fap_t *FAP)
 {
     herr_t hstat;
     int    k;
@@ -902,6 +902,30 @@ int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
     H5Aclose(si_attr);
     H5Sclose(si_space);
 
+    // write FAP
+    if (FAP->fap.p != NULL) {
+        hid_t vlen_double_t = H5Tvlen_create(H5T_NATIVE_DOUBLE);
+
+        hid_t fap_tid = H5Tcreate(H5T_COMPOUND, sizeof(Fap_t));
+        H5Tinsert(fap_tid, "ncoinc_min",     HOFFSET(Fap_t, ncoinc_min),     H5T_NATIVE_INT);
+        H5Tinsert(fap_tid, "ncoinc_max",     HOFFSET(Fap_t, ncoinc_max),     H5T_NATIVE_INT);
+        H5Tinsert(fap_tid, "crit_mul_0_01",  HOFFSET(Fap_t, crit_mul_0_01),  H5T_NATIVE_INT);
+        H5Tinsert(fap_tid, "crit_mul_0_001", HOFFSET(Fap_t, crit_mul_0_001), H5T_NATIVE_INT);
+        H5Tinsert(fap_tid, "fap",            HOFFSET(Fap_t, fap),            vlen_double_t);
+
+        hid_t fap_scalar_space = H5Screate(H5S_SCALAR);
+        hid_t fap_attr = H5Acreate2(dset, "FAP", fap_tid, fap_scalar_space,
+            H5P_DEFAULT, H5P_DEFAULT);
+        hstat = H5Awrite(fap_attr, fap_tid, FAP);
+        if (hstat < 0)
+            fprintf(stderr, "Warning: cannot write FAP attribute on %s in %s\n",
+                dset_name, coin_fname);
+        H5Aclose(fap_attr);
+        H5Sclose(fap_scalar_space);
+        H5Tclose(fap_tid);
+        H5Tclose(vlen_double_t);
+    }
+
     H5Dclose(dset);
     H5Sclose(space);
     H5Tclose(coi_tid);
@@ -909,7 +933,7 @@ int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
     H5Tclose(vlen_int_t);
     H5Fclose(file);
 
-    printf("Written coincidences dataset '%s' to %s (%d coincidences)\n",
+    printf("   Wrote dataset '%s' to %s (%d coincidences)\n",
         dset_name, coin_fname, icoi);
     return EXIT_SUCCESS;
 } /* write_coi_hdf */

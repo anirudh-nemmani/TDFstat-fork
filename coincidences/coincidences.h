@@ -75,6 +75,14 @@ typedef struct {
     float avg_snr, avg_f, avg_fdot, avg_ra, avg_dec;   // physical coordinates of unique trigger in each segment
 } Coincidence;
 
+typedef struct {
+    int ncoinc_min; // Minimum number of coincidences
+    int ncoinc_max; // Maximum number of coincidences
+    int crit_mul_0_01; // Critical multiplicity for fap=0.01
+    int crit_mul_0_001; // Critical multiplicity for fap=0.001
+    hvl_t fap;  // False Alarm Probability [ncoinc_min, ncoinc_max]
+} Fap_t;
+
 
 void read_coinc_ini(char *ini_fname, Coinc_opts *copts);
 size_t read_triggers_file(const char *filename, const char *t_dset_name,
@@ -88,5 +96,6 @@ int init_coin_hdf(const char *coin_fname, Coinc_opts *copts,
                   Search_params *search_par);
 int write_coi_hdf(const char *coin_fname, Coinc_opts *copts,
                   Coincidence *coi, int icoi, const char *shift_str,
-                  int seginfo[][3]);
+                  int seginfo[][3], Fap_t *fap_data);
 float read_vlines_file(const char *veto_fname, Search_params *search_par);
+int FalseAlarmProb(int, int, double, int*, double, double *);
