@@ -9,9 +9,9 @@ CFLAGS += -g -Wall -Wno-unused -fno-omit-frame-pointer \
 	     -march=haswell -mtune=haswell -mavx2 -mfma
 
 LDFLAGS = -L$(INIPARSER_DIR)
-LDLIBS = -lc -lrt -lm -lhdf5 -lhdf5_hl -liniparser
+LDLIBS = -lc -lrt -lm -lhdf5 -lhdf5_hl -lgsl -lcblas -liniparser
 
-SRC = coincidences.c io.c
+SRC = coincidences.c io.c fap.c
 INC = cdefs.h ../search/network/openmp/struct.h coincidences.h
 DEPS = $(SRC) $(INC) Makefile
 
