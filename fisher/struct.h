@@ -16,6 +16,9 @@ typedef struct _comm_line_opts {
      const char *indir, *outdir, *usedet, *label, *addsig, *mods;
      char state_file[FNAME_LENGTH];
 
+     int systematics;          // compute systematic biases (ini: systematics)
+     const char *sysfile;      // file with dA and dPsi, N rows (ini: sysfile)
+
 } Command_line_opts;
 
 
@@ -113,7 +116,8 @@ typedef enum {
     DEC,
     IOTA,
     PSI,
-    PHASE
+    PHASE,
+    H0
 } ParamIndex;
 
 #endif
