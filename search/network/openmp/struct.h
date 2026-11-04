@@ -34,6 +34,7 @@ typedef struct _comm_line_opts {
 typedef struct _signals {
 
      float *xDat;
+     float *xDatOrig;      // Original read xDat
      double *DetSSB;       // Ephemeris of the detector
      double *aa, *bb;      // Amplitude modulation functions
      double *shftf, *shft; // Resampling and time-shifting
@@ -166,7 +167,7 @@ typedef struct _detector {
      Signals sig;
 
      double start_time;  // Start time of the detector
-     
+
 } Detector_settings;
 
 /* Global array of detectors (network) */
@@ -217,7 +218,8 @@ typedef struct _signal_params {
     double h0, snr, freq, fdot;  // Intrinsic signal parameters
     double iota, psi, phase;     // Amplitude modulation parameters
     double ra, dec;              // sky position
-    char amporsnr[4];                 // String of 3 characters + null terminator
+    char amporsnr[4];            // String of 3 characters + null terminator
+    int id;                      // ID number of the signal
 } Signal_params;
 
 #endif

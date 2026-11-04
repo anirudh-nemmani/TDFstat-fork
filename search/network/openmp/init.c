@@ -216,6 +216,7 @@ void init_arrays( Search_settings *sett,
      for (i=0; i<sett->nifo; i++) {
 
           ifo[i].sig.xDat = (float *) calloc(sett->N, sizeof(float));
+          ifo[i].sig.xDatOrig = (float *) calloc(sett->N, sizeof(float));
 
           // Input time-domain data handling
           //
@@ -240,6 +241,9 @@ void init_arrays( Search_settings *sett,
                perror (ifo[i].xdatname);
                exit(EXIT_FAILURE);
           }
+
+          // Making a copy of xDat into xDatOrig
+          memcpy(ifo[i].sig.xDatOrig, ifo[i].sig.xDat, sett->N*sizeof(float));
 
           int j, Nzeros=0;
           // Checking for null values in the data
@@ -362,62 +366,71 @@ void init_arrays( Search_settings *sett,
 void read_signal_file( Signal_params *sgnl_params,
                        Command_line_opts *opts)
 {
-     FILE *data;
-     char amporsnr[4];
-     
-     if ((data=fopen (opts->addsig, "r")) != NULL) {
-         // Fscanning for the GW amplitude h0 or signal-to-noise,
-         // the grid size and the reference frame
-         // (for which the signal freq. is not spun-down/up)
-         
-         do {
-             fscanf (data, "%s", amporsnr);
-         } while ( strcmp(amporsnr, "amp")!=0 && strcmp(amporsnr, "snr")!=0 );
-         
-         strcpy(sgnl_params->amporsnr, amporsnr);
-         if(!strcmp(amporsnr, "amp")) {
-             fscanf (data, "%le %d %le %le %le %le %le %le %le",
-                                  &sgnl_params->h0, &sgnl_params->reffr,
-                                  &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
-                                  &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
-             
-             printf("add_signal(): GW amplitude h0 is %le\n   The reference band of the signal is %d\n"
-                    "   The signal is injected at the following parameters:\n"
-                    "   Frequency [Hz]         : %le\n"
-                    "   Spin-down [Hz/s]       : %le\n"
-                    "   Right ascension [rad]  : %le\n"
-                    "   Declination [rad]      : %le\n"
-                    "   Inclination [rad]      : %le\n"
-                    "   Polarization [rad]     : %le\n"
-                    "   Phase [rad]            : %le\n",
-                    sgnl_params->h0, sgnl_params->reffr, sgnl_params->freq, sgnl_params->fdot, sgnl_params->ra, sgnl_params->dec,
-                    sgnl_params->iota, sgnl_params->psi, sgnl_params->phase);
-         } else if (!strcmp(amporsnr, "snr")) {
-             fscanf (data, "%le %d %le %le %le %le %le %le %le",
-                                  &sgnl_params->snr, &sgnl_params->reffr,
-                                  &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
-                                  &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
-             
-             printf("add_signal(): GW (network) signal-to-noise ratio is %le\n   The reference band of the signal is %d\n"
-                    "   The signal is injected at the following parameters:\n"
-                    "   Frequency [Hz]         : %le\n"
-                    "   Spin-down [Hz/s]       : %le\n"
-                    "   Right ascension [rad]  : %le\n"
-                    "   Declination [rad]      : %le\n"
-                    "   Inclination [rad]      : %le\n"
-                    "   Polarization [rad]     : %le\n"
-                    "   Phase [rad]            : %le\n",
-                    sgnl_params->snr, sgnl_params->reffr, sgnl_params->freq, sgnl_params->fdot, sgnl_params->ra, sgnl_params->dec,
-                    sgnl_params->iota, sgnl_params->psi, sgnl_params->phase);
-         } else {
-             printf("Invalid format in signal file. First column of signals should start with 'amp' or 'snr'.\n");
-             exit(0);
-         }
-         fclose (data);
-         
-     } else {
-         perror (opts->addsig);
+     FILE *data = fopen(opts->addsig, "r");
+     if ( !data ) {
+          perror(opts->addsig);
      }
+
+     char *line=NULL;
+     int i=0;
+     size_t len=0;
+
+     while ( getline(&line, &len, data) != -1 ) {
+
+          // Skip comments and blank lines
+          if ( line[0] == '#' || line[0] == '\n' )
+               continue;
+
+          char amporsnr[4];
+
+          // Scanning amplitude or SNR and reading the parameters
+          if (sscanf(line, "%3s", amporsnr) != 1)
+              continue;
+          strcpy(sgnl_params[i].amporsnr, amporsnr);
+          if(!strcmp(amporsnr, "amp")) {
+              sscanf(line, "%*s %le %d %le %le %le %le %le %le %le",
+                   &sgnl_params[i].h0, &sgnl_params[i].reffr,
+                   &sgnl_params[i].freq, &sgnl_params[i].fdot, &sgnl_params[i].ra, &sgnl_params[i].dec,
+                   &sgnl_params[i].iota, &sgnl_params[i].psi, &sgnl_params[i].phase);
+              sgnl_params[i].id = i;
+              i++;
+
+              // printf("add_signal(): GW amplitude h0 is %le\n   The reference band of the signal is %d\n"
+              //        "   The signal is injected at the following parameters:\n"
+              //        "   Frequency [Hz]         : %le\n"
+              //        "   Spin-down [Hz/s]       : %le\n"
+              //        "   Right ascension [rad]  : %le\n"
+              //        "   Declination [rad]      : %le\n"
+              //        "   Inclination [rad]      : %le\n"
+              //        "   Polarization [rad]     : %le\n"
+              //        "   Phase [rad]            : %le\n",
+              //        sgnl_params[i].h0, sgnl_params[i].reffr, sgnl_params[i].freq, sgnl_params[i].fdot, sgnl_params[i].ra, sgnl_params[i].dec,
+              //        sgnl_params[i].iota, sgnl_params[i].psi, sgnl_params[i].phase);
+          } else if (!strcmp(amporsnr, "snr")) {
+              sscanf(line, "%*s %le %d %le %le %le %le %le %le %le",
+                   &sgnl_params[i].snr, &sgnl_params[i].reffr,
+                   &sgnl_params[i].freq, &sgnl_params[i].fdot, &sgnl_params[i].ra, &sgnl_params[i].dec,
+                   &sgnl_params[i].iota, &sgnl_params[i].psi, &sgnl_params[i].phase);
+              sgnl_params[i].id = i;
+              i++;
+              
+              // printf("add_signal(): GW (network) signal-to-noise ratio is %le\n   The reference band of the signal is %d\n"
+              //        "   The signal is injected at the following parameters:\n"
+              //        "   Frequency [Hz]         : %le\n"
+              //        "   Spin-down [Hz/s]       : %le\n"
+              //        "   Right ascension [rad]  : %le\n"
+              //        "   Declination [rad]      : %le\n"
+              //        "   Inclination [rad]      : %le\n"
+              //        "   Polarization [rad]     : %le\n"
+              //        "   Phase [rad]            : %le\n",
+              //        sgnl_params[i].snr, sgnl_params[i].reffr, sgnl_params[i].freq, sgnl_params[i].fdot, sgnl_params[i].ra, sgnl_params[i].dec,
+              //        sgnl_params[i].iota, sgnl_params[i].psi, sgnl_params[i].phase);
+          } else {
+              printf("Invalid format in signal file. First column of signals should start with 'amp' or 'snr'.\n");
+              exit(0);
+          }
+          
+     } // end of while loop
 } // end of read_signal_file
 
 
@@ -529,8 +542,13 @@ void add_signal( Search_settings *sett,
      for (n=0; n<sett->nifo; n++) {
           for (i=0; i<sett->N; i++) {
                // Adding the signal to the data vector
-               if (ifo[n].sig.xDat[i])
-                    ifo[n].sig.xDat[i] += sgnl_params->h0*signadd[n][i];
+               if (ifo[n].sig.xDat[i]) {
+                    if (opts->mods && strstr(opts->mods, "overlapping")) {
+                         ifo[n].sig.xDat[i] += sgnl_params->h0*signadd[n][i];
+                    } else {
+                         ifo[n].sig.xDat[i] = ifo[n].sig.xDatOrig[i] + sgnl_params->h0*signadd[n][i];
+                    }
+               }
           } // data loop
      } // detector loop
 
@@ -542,8 +560,8 @@ void add_signal( Search_settings *sett,
                char filename[1124];
                sprintf(dirname, "%s/injections", opts->outdir);
                mkdir(dirname, 0755);
-               sprintf(filename, "%s/signal_%03d_%04d_%s%s",
-                    dirname, opts->seg, opts->band, ifo[n].name, opts->label);
+               sprintf(filename, "%s/signal_%03d_%04d_%s_%d%s",
+                    dirname, opts->seg, opts->band, ifo[n].name, sgnl_params->id, opts->label);
                FILE *out = fopen(filename, "w");
                if (out == NULL) {
                     perror(filename);

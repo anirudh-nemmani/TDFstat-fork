@@ -36,7 +36,6 @@ int main (int argc, char* argv[])
      Search_settings sett;
      Search_range s_range;
      Aux_arrays aux_arr;
-     Signal_params sgnl_params;
      int i;
 
      printf("git commit: %s\n", CODEVER);
@@ -91,27 +90,105 @@ int main (int argc, char* argv[])
 
      // inject signals from file
      if(strlen(opts.addsig)) {
-         read_signal_file(&sgnl_params, &opts);
-         add_signal(&sett, &opts, &aux_arr, &sgnl_params);
+          FILE *data;
+          // First get the total number of signals
+          int count=0;
+          char *line=NULL;
+          size_t len=0;
+          
+          if ((data=fopen(opts.addsig, "r")) != NULL) {
+               while (getline(&line, &len, data) != -1) {
+                   if (line[0] != '#' && line[0] != '\n')
+                       count++;
+               }
+               free(line);
+               fclose(data);
+          }
+          else {
+              perror(opts.addsig);
+              return(EXIT_FAILURE);
+          }
+          printf("Total number of injections in the signal file: %d\n", count);
+
+          // Define the sgnl_params array
+          Signal_params sgnl_params[count];
+          read_signal_file(sgnl_params, &opts);
+
+          // Overlapping signals case
+          if (opts.mods && strstr(opts.mods, "overlapping")) {
+
+               // Inject all signals into the xDat file
+               for (i = 0; i < count; i++) {
+                    add_signal(&sett, &opts, &aux_arr, &sgnl_params[i]);
+               }
+
+               // establish search range (s_range)
+               set_search_range(&sett, &opts, &s_range);
+
+               // FFT plans
+               FFTW_plans fftw_plans;
+               FFTW_arrays fftw_arr;
+               plan_fftw(&sett, &opts, &fftw_plans, &fftw_arr, &aux_arr);
+          
+               // Checkpointing
+               int Fnum=0;	// candidate signal number
+               read_checkpoints(&opts, &s_range, &Fnum);
+          
+               // main search job
+               search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, sgnl_params, &Fnum);
+          
+               // Cleanup & memory free
+               cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);
+          }
+
+          else {
+
+               // Non overlapping case
+               for (i = 0; i < count; i++) {
+                    add_signal(&sett, &opts, &aux_arr, &sgnl_params[i]);
+
+                    // establish search range (s_range)
+                    set_search_range(&sett, &opts, &s_range);
+     
+                    // FFT plans
+                    FFTW_plans fftw_plans;
+                    FFTW_arrays fftw_arr;
+                    plan_fftw(&sett, &opts, &fftw_plans, &fftw_arr, &aux_arr);
+               
+                    // Checkpointing
+                    int Fnum=0;	// candidate signal number
+                    read_checkpoints(&opts, &s_range, &Fnum);
+               
+                    // main search job
+                    search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, sgnl_params, &Fnum);
+               
+                    // Cleanup & memory free
+                    cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);     
+               }
+          } // end overlapping and non overlapping
+     } // end add_signal
+     
+     else {
+          Signal_params sgnl_params[0];
+          // No add signal case (standard search)
+          // establish search range (s_range)
+          set_search_range(&sett, &opts, &s_range);
+
+          // FFT plans
+          FFTW_plans fftw_plans;
+          FFTW_arrays fftw_arr;
+          plan_fftw(&sett, &opts, &fftw_plans, &fftw_arr, &aux_arr);
+     
+          // Checkpointing
+          int Fnum=0;	// candidate signal number
+          read_checkpoints(&opts, &s_range, &Fnum);
+     
+          // main search job
+          search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, sgnl_params, &Fnum);
+     
+          // Cleanup & memory free
+          cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);
      }
-
-     // establish search range (s_range)
-     set_search_range(&sett, &opts, &s_range);
-
-     // FFT plans
-     FFTW_plans fftw_plans;
-     FFTW_arrays fftw_arr;
-     plan_fftw(&sett, &opts, &fftw_plans, &fftw_arr, &aux_arr);
-
-     // Checkpointing
-     int Fnum=0;	// candidate signal number
-     read_checkpoints(&opts, &s_range, &Fnum);
-
-     // main search job
-     search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &sgnl_params, &Fnum);
-
-     // Cleanup & memory free
-     cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);
 
      return(EXIT_SUCCESS);
 
