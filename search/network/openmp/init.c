@@ -14,6 +14,7 @@
 #include <gsl/gsl_math.h>
 #include <gsl/gsl_eigen.h>
 #include <time.h>
+#include <float.h>
 
 #include "common.h"
 #include "auxi.h"
@@ -127,7 +128,8 @@ void read_ini_file( Search_settings *sett,
             printf("[ERROR] invalid inj_mode: %s. Must be 'single' or 'multi'.\n", opts->inj_mode);
             exit(EXIT_FAILURE);
         }
-        if (opts->inj_file && opts->inj_dict) {
+        if (opts->inj_file && strlen(opts->inj_file) > 0 &&
+            opts->inj_dict && strlen(opts->inj_dict) > 0) {
             printf("[ERROR] inj_file and inj_dict cannot be used together. Please specify only one.\n");
             exit(EXIT_FAILURE);
         }
@@ -325,214 +327,263 @@ void init_arrays( Search_settings *sett,
 } // end of init arrays
 
 
+/* Allocates and reads the injection file or string in INI file to
+ * be later used for add_injection function. Blank lines and lines
+ * starting with '#' are ignored and returns the number of injections.
+ * Format: id t_ref amp f fdot ra dec iota psi phase
+ * WIP - When we use TOML format for INI files, we need to adjust this
+ * for the TOML table format.
+ */
 
-/* Read signal parameters from a file */
-
-void read_signal_file( Signal_params *sgnl_params,
-                       Command_line_opts *opts)
+int read_injection( Command_line_opts *opts,
+                    Injection_params **inj)
 {
-     FILE *data;
-     char amporsnr[4];
+    FILE *data = NULL;
+    char line[MAXLINE];
+    char c;
+    int ninj = 0;
+    Injection_params ip;
 
-     if ((data=fopen (opts->addsig, "r")) != NULL) {
-         // Fscanning for the GW amplitude h0 or signal-to-noise,
-         // the grid size and the reference frame
-         // (for which the signal freq. is not spun-down/up)
+    *inj = NULL;
 
-         do {
-             fscanf (data, "%s", amporsnr);
-         } while ( strcmp(amporsnr, "amp")!=0 && strcmp(amporsnr, "snr")!=0 );
+    // open both sources as a FILE*
+    if (opts->inj_file && strlen(opts->inj_file) > 0)
+        data = fopen(opts->inj_file, "r");
+    else if (opts->inj_dict && strlen(opts->inj_dict) > 0)
+        // WIP: When TOML INI parser comes live, we have to change fmemopen with
+        // something that fills Injection_params from TOML table.
+        data = fmemopen((void *)opts->inj_dict, strlen(opts->inj_dict), "r");
 
-         strcpy(sgnl_params->amporsnr, amporsnr);
-         if(!strcmp(amporsnr, "amp")) {
-             fscanf (data, "%le %d %le %le %le %le %le %le %le",
-                                  &sgnl_params->h0, &sgnl_params->reffr,
-                                  &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
-                                  &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
+    while (data && fgets(line, sizeof(line), data)) {
+        // skip blank lines and comments: first non-whitespace char missing or '#'
+        if (sscanf(line, " %c", &c) != 1 || c == '#') continue;
 
-             printf("add_signal(): GW amplitude h0 is %le\n   The reference band of the signal is %d\n"
-                    "   The signal is injected at the following parameters:\n"
-                    "   Frequency [Hz]         : %le\n"
-                    "   Spin-down [Hz/s]       : %le\n"
-                    "   Right ascension [rad]  : %le\n"
-                    "   Declination [rad]      : %le\n"
-                    "   Inclination [rad]      : %le\n"
-                    "   Polarization [rad]     : %le\n"
-                    "   Phase [rad]            : %le\n",
-                    sgnl_params->h0, sgnl_params->reffr, sgnl_params->freq, sgnl_params->fdot, sgnl_params->ra, sgnl_params->dec,
-                    sgnl_params->iota, sgnl_params->psi, sgnl_params->phase);
-         } else if (!strcmp(amporsnr, "snr")) {
-             fscanf (data, "%le %d %le %le %le %le %le %le %le",
-                                  &sgnl_params->snr, &sgnl_params->reffr,
-                                  &sgnl_params->freq, &sgnl_params->fdot, &sgnl_params->ra, &sgnl_params->dec,
-                                  &sgnl_params->iota, &sgnl_params->psi, &sgnl_params->phase);
+        if (sscanf(line, "%d %lf %lf %lf %lf %lf %lf %lf %lf %lf",
+                &ip.id, &ip.t_ref, &ip.amp, &ip.f, &ip.fdot,
+                &ip.ra, &ip.dec, &ip.iota, &ip.psi, &ip.phase) != 10) {
+            printf("[ERROR] read_injection(): malformed injection line:\n   '%s'\n", line);
+            exit(EXIT_FAILURE);
+        }
+        *inj = realloc(*inj, (ninj + 1) * sizeof(Injection_params));
+        (*inj)[ninj++] = ip;
+    }
+    if (data) fclose(data);
 
-             printf("add_signal(): GW (network) signal-to-noise ratio is %le\n   The reference band of the signal is %d\n"
-                    "   The signal is injected at the following parameters:\n"
-                    "   Frequency [Hz]         : %le\n"
-                    "   Spin-down [Hz/s]       : %le\n"
-                    "   Right ascension [rad]  : %le\n"
-                    "   Declination [rad]      : %le\n"
-                    "   Inclination [rad]      : %le\n"
-                    "   Polarization [rad]     : %le\n"
-                    "   Phase [rad]            : %le\n",
-                    sgnl_params->snr, sgnl_params->reffr, sgnl_params->freq, sgnl_params->fdot, sgnl_params->ra, sgnl_params->dec,
-                    sgnl_params->iota, sgnl_params->psi, sgnl_params->phase);
-         } else {
-             printf("Invalid format in signal file. First column of signals should start with 'amp' or 'snr'.\n");
-             exit(0);
-         }
-         fclose (data);
+    if (ninj == 0) {
+        printf("[ERROR] read_injection(): inj_mode is set but no injections were found in inj_file or inj_dict.\n"
+               "        Set inj_mode empty to run without injections.\n");
+        exit(EXIT_FAILURE);
+    }
 
-     } else {
-         perror (opts->addsig);
-     }
-} // end of read_signal_file
+    printf("read_injection(): %d injection(s) read\n", ninj);
+    for (int i = 0; i < ninj; i++)
+        printf("   id=%d t_ref=%f %s=%le f=%le fdot=%le ra=%le dec=%le iota=%le psi=%le phase=%le\n",
+            (*inj)[i].id, (*inj)[i].t_ref, opts->use_amp ? "amp" : "snr", (*inj)[i].amp, (*inj)[i].f, (*inj)[i].fdot,
+            (*inj)[i].ra, (*inj)[i].dec, (*inj)[i].iota, (*inj)[i].psi, (*inj)[i].phase);
+
+    return ninj;
+} // end of read_injection
 
 
+/* Generates the injection and adds them to the xDat array in the
+ * detector structures. If the injection mode is "multi", it adds
+ * all the injections to the xDat array. If it's "single" mode, it
+ * adds one by one based on the index idx from the main.c loop.
+ */
 
-/* Add signal to data */
-
-void add_signal( Search_settings *sett,
-                 Command_line_opts *opts,
-                 Aux_arrays *aux_arr,
-                 Signal_params *sgnl_params)
+void add_injection( Search_settings *sett,
+                    Command_line_opts *opts,
+                    Aux_arrays *aux_arr,
+                    Injection_params *inj,
+                    int ninj,
+                    int inj_idx)
 {
+    int i, j, n, k, nadd = 0;
+    double sum, h0, delta;
+    double sinalpha, cosalpha, sindelta, cosdelta, phaseadd, shiftadd;
+    double phi, psi, cosi, cosip, amplit[4];
+    double nSource[3], freqo[2];
 
-     int i, j, n, gsize, reffr;
-     double sum = 0., cof, d1;
-     double sigma_noise = 1.0;
-     double be[2];
-     double sinalpha, cosalpha, sindelta, cosdelta, phaseadd, shiftadd;
-     double phi, psi, cosi, cosip, iota, amplit[4];
-     double nSource[3], freqo[2];
+    // Storing the original noise data
+    // Allocated only when injection mode is "single"
+    static float *xDat_orig[MAX_DETECTORS];
 
-     char amporsnr[4];
+    if (!strcmp(opts->inj_mode, "single")) {
+        for (n=0; n<sett->nifo; n++) {
+            if (!xDat_orig[n]) {
+                // first call: store the original data
+                xDat_orig[n] = (float *)malloc(sett->N*sizeof(float));
+                memcpy(xDat_orig[n], ifo[n].sig.xDat, sett->N*sizeof(float));
+            } else {
+                // next calls: start again from the original data
+                memcpy(ifo[n].sig.xDat, xDat_orig[n], sett->N*sizeof(float));
+            }
+        }
+    }
 
-     // Setting the reference frame
-     reffr = sgnl_params->reffr;
+    // Allocate arrays for added injection, for each detector
+    double **injadd = malloc((sett->nifo)*sizeof(double *));
+    for (n=0; n<sett->nifo; n++)
+        injadd[n] = malloc((sett->N)*sizeof(double));
 
-     // Converting the frequency into dimensionless units
-     freqo[0] = 2 * M_PI * sgnl_params->freq * sett->dt;
-     freqo[1] = M_PI * sgnl_params->fdot * sett->dt * sett->dt;
+    // Allocation for saving the injected signal if opts->mods has "save_inj"
+    int save_inj = (opts->mods && strstr(opts->mods, "save_inj") != NULL);
+    double **injtot = NULL;
+    if (save_inj && !strcmp(opts->inj_mode, "multi")) {
+        injtot = malloc((sett->nifo)*sizeof(double *));
+        for (n=0; n<sett->nifo; n++)
+            injtot[n] = calloc(sett->N, sizeof(double));
+    }
 
-     // Shift the frequency to the current segment based on spindown from the reference segment
-     freqo[0] += 2.*freqo[1]*(sett->N)*(opts->seg - reffr);
+    // Add all injections and skip if the injection mode is "single"
+    for (k=0; k<ninj; k++) {
 
-     // Check if the signal is in band
-     if( freqo[0]/(2*M_PI*sett->dt) < sett->fpo || freqo[0]/(2*M_PI*sett->dt) > sett->fpo + sett->B ) {
-          printf("add_signal(): signal out of band f=%le s=%le\n", freqo[0]/(2*M_PI*sett->dt), sgnl_params->fdot);
-          return;
-     }
+        if (!strcmp(opts->inj_mode, "single") && k != inj_idx) continue;
 
-     // Calculation of sin alpha, cos alpha, sin delta, cos delta of the signal.
-     // Check Eq. 18 of Phys. Rev. D 58, 063001 1998
-     sinalpha = sin(sgnl_params->ra);
-     cosalpha = cos(sgnl_params->ra);
-     sindelta = sin(sgnl_params->dec);
-     cosdelta = cos(sgnl_params->dec);
+        Injection_params *ip = &inj[k];
+        sum = 0.;
 
-     // Calculation of four amplitudes from polarization, phase and inclination
-     // Check Eq. 32 - 35 of Phys. Rev. D 58, 063001 1998
-     cosi = cos(sgnl_params->iota);
-     psi = sgnl_params->psi;
-     phi = sgnl_params->phase;
-     cosip = (1. + cosi*cosi)/2.;
+        // Offset (in samples) between the reference time and the start of the current segment
+        delta = (ifo[0].start_time - ip->t_ref)/sett->dt;
 
-     amplit[0] = cos(2.*psi)*cosip*cos(phi) - sin(2.*psi)*cosi*sin(phi);
-     amplit[1] = sin(2.*psi)*cosip*cos(phi) + cos(2.*psi)*cosi*sin(phi);
-     amplit[2] = -cos(2.*psi)*cosip*sin(phi) - sin(2.*psi)*cosi*cos(phi);
-     amplit[3] = -sin(2.*psi)*cosip*sin(phi) + cos(2.*psi)*cosi*cos(phi);
+        // Converting the frequency into dimensionless units
+        freqo[0] = 2 * M_PI * ip->f * sett->dt;
+        freqo[1] = M_PI * ip->fdot * sett->dt * sett->dt;
 
-     // To keep coherent phase between time segments
-     double phaseshift = freqo[0]*sett->N*(opts->seg - reffr)
-                       - freqo[1]*pow(sett->N*(opts->seg - reffr), 2);
+        // Shift the frequency to the current segment based on spindown from the reference time
+        freqo[0] += 2.*freqo[1]*delta;
 
-     // Allocate arrays for added signal, for each detector
-     double **signadd = malloc((sett->nifo)*sizeof(double *));
-     for (n=0; n<sett->nifo; n++)
-          signadd[n] = malloc((sett->N)*sizeof(double));
+        // Check if the signal is in band
+        if( freqo[0]/(2*M_PI*sett->dt) < sett->fpo || freqo[0]/(2*M_PI*sett->dt) > sett->fpo + sett->B ) {
+            printf("add_injection(): injection id=%d out of band f=%le s=%le\n",
+                   ip->id, freqo[0]/(2*M_PI*sett->dt), ip->fdot);
+            continue;
+        }
 
-     // Loop for each detector - sum calculations
-     for (n=0; n<sett->nifo; n++) {
+        // Calculation of sin alpha, cos alpha, sin delta, cos delta of the signal.
+        // Check Eq. 18 of Phys. Rev. D 58, 063001 1998
+        sinalpha = sin(ip->ra);
+        cosalpha = cos(ip->ra);
+        sindelta = sin(ip->dec);
+        cosdelta = cos(ip->dec);
 
-          modvir(sinalpha, cosalpha, sindelta, cosdelta, sett->N, &ifo[n], aux_arr);
+        // Calculation of four amplitudes from polarization, phase and inclination
+        // Check Eq. 32 - 35 of Phys. Rev. D 58, 063001 1998
+        cosi = cos(ip->iota);
+        psi = ip->psi;
+        phi = ip->phase;
+        cosip = (1. + cosi*cosi)/2.;
 
-          nSource[0] = cosalpha*cosdelta;
-          nSource[1] = sinalpha*cosdelta;
-          nSource[2] = sindelta;
+        amplit[0] = cos(2.*psi)*cosip*cos(phi) - sin(2.*psi)*cosi*sin(phi);
+        amplit[1] = sin(2.*psi)*cosip*cos(phi) + cos(2.*psi)*cosi*sin(phi);
+        amplit[2] = -cos(2.*psi)*cosip*sin(phi) - sin(2.*psi)*cosi*cos(phi);
+        amplit[3] = -sin(2.*psi)*cosip*sin(phi) + cos(2.*psi)*cosi*cos(phi);
 
-          for (i=0; i<sett->N; i++) {
+        // To keep coherent phase between time segments
+        double phaseshift = freqo[0]*delta - freqo[1]*pow(delta, 2);
 
-               // Calculation of n*r / c*delta_t vector
-               shiftadd = 0.;
-               for (j=0; j<3; j++)
-                   	shiftadd += nSource[j]*ifo[n].sig.DetSSB[i*3+j];
+        // Loop for each detector - sum calculations
+        for (n=0; n<sett->nifo; n++) {
 
-               // Phase (no-approximations)
-               // Matches with the solution in LAL Pulsar
-               // Refer Phys. Rev. D 59, 063003 1999
-               phaseadd = freqo[0]*(i + shiftadd) + freqo[1]*(2.*shiftadd*i + aux_arr->t2[i] + shiftadd*shiftadd) + phaseshift;
-               // We now dephase this to shift the signal within the bandwidth
-               phaseadd -= 2*M_PI*sett->dt*sett->fpo*i;
+            modvir(sinalpha, cosalpha, sindelta, cosdelta, sett->N, &ifo[n], aux_arr);
 
-               // The whole signal with 4 amplitudes and modulations
-               signadd[n][i] = amplit[0]*(ifo[n].sig.aa[i])*cos(phaseadd)
-                             + amplit[1]*(ifo[n].sig.bb[i])*cos(phaseadd)
-                             + amplit[2]*(ifo[n].sig.aa[i])*sin(phaseadd)
-                             + amplit[3]*(ifo[n].sig.bb[i])*sin(phaseadd);
+            nSource[0] = cosalpha*cosdelta;
+            nSource[1] = sinalpha*cosdelta;
+            nSource[2] = sindelta;
 
-               // Sum over signals
-               sum += pow(signadd[n][i], 2.);
+            for (i=0; i<sett->N; i++) {
 
-          } // data loop
-     } // detector loop
+                // Gaps in the data (xDat = 0): no signal, not counted in the SNR
+                if (fabs(ifo[n].sig.xDat[i]) <= FLT_MIN) {
+                    injadd[n][i] = 0.;
+                    continue;
+                }
 
-     // Signal amplitude h0 from the snr
-     // (currently only makes sense for Gaussian noise with fixed sigma and one detector, but can be generalized)
-     if (!strcmp(sgnl_params->amporsnr, "snr")) {
-         sgnl_params->h0 = (sgnl_params->snr * sqrt(ifo[n].sig.sig2)) / (sqrt(sum));
-     }
+                // Calculation of n*r / c*delta_t vector
+                shiftadd = 0.;
+                for (j=0; j<3; j++)
+                    shiftadd += nSource[j]*ifo[n].sig.DetSSB[i*3+j];
 
-     // Loop for each detector - adding signal to data (point by point)
-     for (n=0; n<sett->nifo; n++) {
-          for (i=0; i<sett->N; i++) {
-               // Adding the signal to the data vector
-               if (ifo[n].sig.xDat[i])
-                    ifo[n].sig.xDat[i] += sgnl_params->h0*signadd[n][i];
-          } // data loop
-     } // detector loop
+                // Phase (no-approximations)
+                // Matches with the solution in LAL Pulsar
+                // Refer Phys. Rev. D 59, 063003 1999
+                phaseadd = freqo[0]*(i + shiftadd) + freqo[1]*(2.*shiftadd*i + aux_arr->t2[i] + shiftadd*shiftadd) + phaseshift;
+                // We now dephase this to shift the signal within the bandwidth
+                phaseadd -= 2*M_PI*sett->dt*sett->fpo*i;
 
-     // Saving the data points if opts->mods has "write_signal"
-     int write_signal = (opts->mods && strstr(opts->mods, "write_signal") != NULL);
-     if (write_signal) {
-          for (n=0; n<sett->nifo; n++) {
-               char dirname[562];
-               char filename[1124];
-               sprintf(dirname, "%s/injections", opts->outdir);
-               mkdir(dirname, 0755);
-               sprintf(filename, "%s/signal_%03d_%04d_%s%s",
-                    dirname, opts->seg, opts->band, ifo[n].name, opts->label);
-               FILE *out = fopen(filename, "w");
-               if (out == NULL) {
-                    perror(filename);
-                    exit(EXIT_FAILURE);
-               }
+                // The whole signal with 4 amplitudes and modulations
+                injadd[n][i] = amplit[0]*(ifo[n].sig.aa[i])*cos(phaseadd)
+                    + amplit[1]*(ifo[n].sig.bb[i])*cos(phaseadd)
+                    + amplit[2]*(ifo[n].sig.aa[i])*sin(phaseadd)
+                    + amplit[3]*(ifo[n].sig.bb[i])*sin(phaseadd);
 
-               for (i=0; i<sett->N; i++) {
-                    fprintf(out, "%e\n", sgnl_params->h0*signadd[n][i]);
-               }
+                // Noise-weighted sum over signal (for the network SNR)
+                sum += pow(injadd[n][i], 2.)/ifo[n].sig.sig2;
 
-               fclose(out);
-          } // detector loop
-     } // writting signal
+            } // data loop
+        } // detector loop
 
-     // Free auxiliary 2d array
-     for (n=0; n<sett->nifo; n++)
-          free(signadd[n]);
-     free(signadd);
+        // Signal amplitude h0: 3rd column is amplitude (use_amp=1) or network SNR (use_amp=0)
+        // network SNR^2 = h0^2 * sum_n sum_i s_n[i]^2 / sig2_n  (Gaussian noise with fixed sigma per detector)
+        if (opts->use_amp) {
+            h0 = ip->amp;
+        } else {
+            h0 = ip->amp / sqrt(sum);
+        }
+        printf("add_injection(): injection id=%d h0=%le\n", ip->id, h0);
 
-} // add_signal()
+        // Loop for each detector - scaling by h0 and adding signal to data (point by point)
+        for (n=0; n<sett->nifo; n++) {
+            for (i=0; i<sett->N; i++) {
+                injadd[n][i] *= h0;
+                // Adding the signal to the data vector
+                ifo[n].sig.xDat[i] += injadd[n][i];
+                if (injtot)
+                    injtot[n][i] += injadd[n][i];
+            } // data loop
+        } // detector loop
+        nadd++;
+
+    } // injections loop
+
+    // Saving the injected signal, one file per detector (skipped if all injections were out of band)
+    // suffix as the output dataset name: inj_<id> (single) or inj_0 (multi)
+    if (save_inj && nadd > 0) {
+        char filename[FNAME_LENGTH];
+        int inj_id = strcmp(opts->inj_mode, "single") ? 0 : inj[inj_idx].id;
+
+        snprintf(filename, FNAME_LENGTH, "%s/injections", opts->outdir);
+        mkdir(filename, 0755);
+
+        for (n=0; n<sett->nifo; n++) {
+            snprintf(filename, FNAME_LENGTH, "%s/injections/signal_%03d_%04d_%s_inj_%d%s",
+                opts->outdir, opts->seg, opts->band, ifo[n].name, inj_id, opts->label);
+            FILE *out = fopen(filename, "w");
+            if (out == NULL) {
+                perror(filename);
+                exit(EXIT_FAILURE);
+            }
+
+            for (i=0; i<sett->N; i++) {
+                fprintf(out, "%e\n", injtot ? injtot[n][i] : injadd[n][i]);
+            }
+
+            fclose(out);
+        } // detector loop
+    } // writing signal
+
+    if (injtot) {
+        for (n=0; n<sett->nifo; n++)
+            free(injtot[n]);
+        free(injtot);
+    }
+
+    // Free auxiliary 2d array
+    for (n=0; n<sett->nifo; n++)
+        free(injadd[n]);
+    free(injadd);
+
+} // add_injection()
 
 
 

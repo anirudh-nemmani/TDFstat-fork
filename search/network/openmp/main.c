@@ -102,26 +102,13 @@ int main (int argc, char* argv[])
     for(i=0; i<sett.nifo; i++)
         rogcvir(&ifo[i]);
 
-     // WIP INJ
-     //
-     // here we have opts.use_amp, opts.inj_mode, opts.inj_file, opts.inj_dict
-     // 1. read the whole injection file or dictionary into a string
-     // 2. determine the number of injections, ninj and allocate array inj
-     int ninj = 1;
-     inj = malloc(ninj * sizeof(Injection_params));
-     // 3. extract the injection parameters from the string and store them in array inj,
-     // 4. -if opts.inj_mode is "single", then loop over the array (inject and run search)
-     //    - if opts.inj_mode is "multi", then inject all signals and run search
-     //    * in both cases pass the whole array inj and current injection index to search,
-     //      for inj_mode=multi pass 0 - there will be only one dataset
-     //
-     //
-     // inject signals from file
-     if(strlen(opts.addsig)) {
-         read_signal_file(&sgnl_params, &opts);
-         add_signal(&sett, &opts, &aux_arr, &sgnl_params);
-     }
-
+    // Read injection file/dict to add injections (if multi mode)
+    int ninj = 0;
+    if (opts.inj_mode && strlen(opts.inj_mode) > 0) {
+        ninj = read_injection(&opts, &inj);
+        if (!strcmp(opts.inj_mode, "multi"))
+            add_injection(&sett, &opts, &aux_arr, inj, ninj, inj_idx);
+    }
      // WIP INJ
      // pass inj and inj_idx, if gcenter=inj then substiture current injection possition (issue an error if inj_mode=multi)
      // establish search range (s_range)
@@ -136,10 +123,17 @@ int main (int argc, char* argv[])
      int Fnum=0;	// candidate signal number
      read_checkpoints(&opts, &s_range, &Fnum);
 
-     // WIP INJ
-     // inj_idx=0 for testing
-     // main search job
-     search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, inj, ninj, inj_idx);
+    // main search job
+    if (opts.inj_mode && !strcmp(opts.inj_mode, "single")) {
+        for (inj_idx=0; inj_idx<ninj; inj_idx++) {
+            // add injections (if single mode)
+            add_injection(&sett, &opts, &aux_arr, inj, ninj, inj_idx);
+            search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, inj, ninj, inj_idx);
+        }
+    } else {
+        // no injections or multi mode (just one search)
+        search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, inj, ninj, inj_idx);
+    }
 
      // Cleanup & memory free
      cleanup(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr);

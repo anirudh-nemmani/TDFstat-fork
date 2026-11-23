@@ -22,15 +22,17 @@ void init_arrays(
                     Command_line_opts *opts,
                     Aux_arrays *aux_arr);
 
-void read_signal_file(
-                    Signal_params *sgnl_params,
-                    Command_line_opts *opts);
+int read_injection(
+                    Command_line_opts *opts,
+                    Injection_params **inj);
 
-void add_signal(
+void add_injection(
                     Search_settings *sett,
                     Command_line_opts *opts,
                     Aux_arrays *aux_arr,
-                    Signal_params *sgnl_params);
+                    Injection_params *inj,
+                    int ninj,
+                    int inj_idx);
 
 void set_search_range(
                     Search_settings *sett,
