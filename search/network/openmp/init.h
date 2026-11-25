@@ -37,7 +37,8 @@ void add_injection(
 void set_search_range(
                     Search_settings *sett,
                     Command_line_opts *opts,
-                    Search_range *s_range);
+                    Search_range *s_range,
+                    Injection_params *inj);
 
 void read_grid(
                     Search_settings *sett,

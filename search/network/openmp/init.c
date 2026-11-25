@@ -119,21 +119,26 @@ void read_ini_file( Search_settings *sett,
     opts->inj_mode = iniparser_getstring(ini, "injections:inj_mode", NULL);
     opts->inj_file = iniparser_getstring(ini, "injections:inj_file", NULL);
     opts->inj_dict = iniparser_getstring(ini, "injections:inj_dict", NULL);
+    // empty values (key = ) are NULL, like missing keys
+    if (opts->inj_mode && !opts->inj_mode[0]) opts->inj_mode = NULL;
+    if (opts->inj_file && !opts->inj_file[0]) opts->inj_file = NULL;
+    if (opts->inj_dict && !opts->inj_dict[0]) opts->inj_dict = NULL;
 
-    // WIP INJ
-    // validate injection options
-    // we assume that inj_dict is just 1 line string with single injection exactly like a line in inj_file
-    if (opts->inj_mode && strlen(opts->inj_mode) > 0) {
-        if (strcmp(opts->inj_mode, "single") != 0 && strcmp(opts->inj_mode, "multi") != 0) {
-            printf("[ERROR] invalid inj_mode: %s. Must be 'single' or 'multi'.\n", opts->inj_mode);
+    // injection options
+    if (opts->inj_mode) {
+        if (strcmp(opts->inj_mode, "serial") != 0 && strcmp(opts->inj_mode, "multi") != 0) {
+            printf("[ERROR] invalid inj_mode: %s. Must be 'serial' or 'multi'.\n", opts->inj_mode);
             exit(EXIT_FAILURE);
         }
-        if (opts->inj_file && strlen(opts->inj_file) > 0 &&
-            opts->inj_dict && strlen(opts->inj_dict) > 0) {
+        if (!opts->inj_file && !opts->inj_dict) {
+            printf("[ERROR] inj_mode = %s needs inj_file or inj_dict\n", opts->inj_mode);
+            exit(EXIT_FAILURE);
+        }
+        if (opts->inj_file && opts->inj_dict) {
             printf("[ERROR] inj_file and inj_dict cannot be used together. Please specify only one.\n");
             exit(EXIT_FAILURE);
         }
-        if ((opts->inj_file && strlen(opts->inj_file) > 0)) {
+        if (opts->inj_file) {
             // check if the file exists
             FILE *file = fopen(opts->inj_file, "r");
             if (file) {
@@ -143,6 +148,14 @@ void read_ini_file( Search_settings *sett,
                 exit(EXIT_FAILURE);
             }
         }
+    }
+
+    // gcenter = injection (not for allsky, which ignores gcenter): a grid center for every injection,
+    // so only with inj_mode = serial
+    if (strcmp(opts->gtype, "allsky") != 0 && opts->gcenter && strcmp(opts->gcenter, "injection") == 0 &&
+        !(opts->inj_mode && strcmp(opts->inj_mode, "serial") == 0)) {
+        printf("[ERROR] gcenter = injection needs inj_mode = serial\n");
+        exit(EXIT_FAILURE);
     }
 
     // various checks
@@ -347,9 +360,9 @@ int read_injection( Command_line_opts *opts,
     *inj = NULL;
 
     // open both sources as a FILE*
-    if (opts->inj_file && strlen(opts->inj_file) > 0)
+    if (opts->inj_file)
         data = fopen(opts->inj_file, "r");
-    else if (opts->inj_dict && strlen(opts->inj_dict) > 0)
+    else if (opts->inj_dict)
         // WIP: When TOML INI parser comes live, we have to change fmemopen with
         // something that fills Injection_params from TOML table.
         data = fmemopen((void *)opts->inj_dict, strlen(opts->inj_dict), "r");
@@ -387,7 +400,7 @@ int read_injection( Command_line_opts *opts,
 
 /* Generates the injection and adds them to the xDat array in the
  * detector structures. If the injection mode is "multi", it adds
- * all the injections to the xDat array. If it's "single" mode, it
+ * all the injections to the xDat array. If it's "serial" mode, it
  * adds one by one based on the index idx from the main.c loop.
  */
 
@@ -405,10 +418,10 @@ void add_injection( Search_settings *sett,
     double nSource[3], freqo[2];
 
     // Storing the original noise data
-    // Allocated only when injection mode is "single"
+    // Allocated only when injection mode is "serial"
     static float *xDat_orig[MAX_DETECTORS];
 
-    if (!strcmp(opts->inj_mode, "single")) {
+    if (!strcmp(opts->inj_mode, "serial")) {
         for (n=0; n<sett->nifo; n++) {
             if (!xDat_orig[n]) {
                 // first call: store the original data
@@ -435,10 +448,10 @@ void add_injection( Search_settings *sett,
             injtot[n] = calloc(sett->N, sizeof(double));
     }
 
-    // Add all injections and skip if the injection mode is "single"
+    // Add all injections and skip if the injection mode is "serial"
     for (k=0; k<ninj; k++) {
 
-        if (!strcmp(opts->inj_mode, "single") && k != inj_idx) continue;
+        if (!strcmp(opts->inj_mode, "serial") && k != inj_idx) continue;
 
         Injection_params *ip = &inj[k];
         sum = 0.;
@@ -455,7 +468,7 @@ void add_injection( Search_settings *sett,
 
         // Check if the signal is in band
         if( freqo[0]/(2*M_PI*sett->dt) < sett->fpo || freqo[0]/(2*M_PI*sett->dt) > sett->fpo + sett->B ) {
-            printf("add_injection(): injection id=%d out of band f=%le s=%le\n",
+            printf("[WARNING] injection id=%d out of band f=%le s=%le\n",
                    ip->id, freqo[0]/(2*M_PI*sett->dt), ip->fdot);
             continue;
         }
@@ -547,10 +560,10 @@ void add_injection( Search_settings *sett,
     } // injections loop
 
     // Saving the injected signal, one file per detector (skipped if all injections were out of band)
-    // suffix as the output dataset name: inj_<id> (single) or inj_0 (multi)
+    // suffix as the output dataset name: inj_<id> (serial) or inj_0 (multi)
     if (save_inj && nadd > 0) {
         char filename[FNAME_LENGTH];
-        int inj_id = strcmp(opts->inj_mode, "single") ? 0 : inj[inj_idx].id;
+        int inj_id = strcmp(opts->inj_mode, "serial") ? 0 : inj[inj_idx].id;
 
         snprintf(filename, FNAME_LENGTH, "%s/injections", opts->outdir);
         mkdir(filename, 0755);
@@ -590,201 +603,206 @@ void add_injection( Search_settings *sett,
 /* Search range */
 
 void set_search_range( Search_settings *sett,
-		             Command_line_opts *opts,
-                       Search_range *s_range)
+		               Command_line_opts *opts,
+                       Search_range *s_range,
+                       Injection_params *inj)
 {
-     /*
-     Sets the grid range in code units.
-     Input: opts, sett
-     Output: s_range
+    /*
+    Sets the grid range in code units.
+    Input: opts, sett, inj (current injection for gcenter = injection, otherwise NULL)
+    Output: s_range
 
-     The grid is formed by points in 4D search parameters space:
-                 frequency, spindown, two sky positions (m, n) which map to (ra, dec).
-     The reference grid is standard, allsky, "integer" grid with integer node coordinates and spacing of 1.
-     For allsky_range and directed_range fractional grid points are allowed.
-     Grid range is specified by three 4D vectors:
+    The grid is formed by points in 4D search parameters space:
+            frequency, spindown, two sky positions (m, n) which map to (ra, dec).
+    The reference grid is standard, allsky, "integer" grid with integer node coordinates and spacing of 1.
+    For allsky_range and directed_range fractional grid points are allowed.
+    Grid range is specified by three 4D vectors:
         - gcenter: middle point of the grid in physical units (f [Hz], fdot [Hz/s], ra and dec [radians])
         - gsizes: grid range from gcenter, so the grid span is [gcenter-gsizes, gcenter+gsizes];
                   gsizes units = grid spacing of the reference, allsky grid (1)
         - gsteps: spacing of grid points in units of the reference grid spacing (1)
-     Example for 1D: gsize=2.5 and gstep=0.5 results in range [gcenter-5, gcenter+5] with spacing 0.5,
-                    which means 19 grid points with density twice the density of allsky grid.
+    Example for 1D: gsize=2.5 and gstep=0.5 results in range [gcenter-5, gcenter+5] with spacing 0.5,
+                which means 19 grid points with density twice the density of allsky grid.
 
-     There are 3 grid types (gtype):
-          * allsky: the whole sky is searched; coordinates of grid points are integer with spacing of 1;
-                    gcenter, gsizes, gsteps are ignored; gsteps=1.
-          * allsky_range: gcenter is shifted to the nearest integer grid point;
-                          fractional grid range is +/- gsizes from gcenter;
-                          fractional grid spacing is set to gsteps.
-          * directed_range: gcenter is exactly at the specified coordinates;
-                            gsizes and gsteps can be frectional like for allsky_range.
-     */
+    There are 3 grid types (gtype):
+        * allsky: the whole sky is searched; coordinates of grid points are integer with spacing of 1;
+                  gcenter, gsizes, gsteps are ignored; gsteps=1.
+        * allsky_range: gcenter is shifted to the nearest integer grid point;
+                        fractional grid range is +/- gsizes from gcenter;
+                        fractional grid spacing is set to gsteps.
+        * directed_range: gcenter is exactly at the specified coordinates;
+                          gsizes and gsteps can be frectional like for allsky_range.
+    */
 
-     float fr,
+    float fr,
           sr, sr_gsize, sr_step,
           alphar, deltar, nr_gsize, nr_step, mr_gsize, mr_step;
-     int fr_gsize, fr_step, fmid;
-     float smid, nmid, mmid;
-     double sgnlol[4];
+    int fr_gsize, fr_step, fmid;
+    float smid, nmid, mmid;
+    double sgnlol[4];
 
-     // Hemispheres (with respect to the ecliptic)
-     if(opts->hemi) {
-          s_range->pmr[0] = opts->hemi;
-          s_range->pmr[1] = opts->hemi;
-     } else {
-          s_range->pmr[0] = 1;
-          s_range->pmr[1] = 2;
-     }
-     // default grid steps
-     s_range->mstep = 1.;
-     s_range->nstep = 1.;
-     s_range->sstep = 1.;
+    // Hemispheres (with respect to the ecliptic)
+    if(opts->hemi) {
+        s_range->pmr[0] = opts->hemi;
+        s_range->pmr[1] = opts->hemi;
+    } else {
+        s_range->pmr[0] = 1;
+        s_range->pmr[1] = 2;
+    }
+    // default grid steps
+    s_range->mstep = 1.;
+    s_range->nstep = 1.;
+    s_range->sstep = 1.;
 
-     if ( strcmp(opts->gtype, "allsky")==0 ) {
-          // Maximum grid ranges given grid matrix M
-          gridr(sett->M, s_range->spndr, s_range->nr, s_range->mr, sett->oms, sett->Smax);
-          s_range->fr[0] = sett->nmin;
-          s_range->fr[1] = sett->nmax;
+    if ( strcmp(opts->gtype, "allsky")==0 ) {
+        // Maximum grid ranges given grid matrix M
+        gridr(sett->M, s_range->spndr, s_range->nr, s_range->mr, sett->oms, sett->Smax);
+        s_range->fr[0] = sett->nmin;
+        s_range->fr[1] = sett->nmax;
 
-          printf("[set_search_range] gtype = allsky\n");
-          printf("[set_search_range] Hemispheres = %d %d\n", s_range->pmr[0], s_range->pmr[1]);
-          printf("[set_search_range] Maximum grid ranges:\n");
-          printf("---------------------------------------\n");
-          printf("   |          min              max\n");
-          printf("---------------------------------------\n");
-          printf("mm | %12g     %12g\n", s_range->mr[0], s_range->mr[1]);
-          printf("nn | %12g     %12g\n", s_range->nr[0], s_range->nr[1]);
-          printf("s  | %12g     %12g\n", s_range->spndr[0], s_range->spndr[1]);
-          printf("f  | %12d     %12d\n", s_range->fr[0], s_range->fr[1]);
-          printf("---------------------------------------\n\n");
+        printf("[set_search_range] gtype = allsky\n");
+        printf("[set_search_range] Hemispheres = %d %d\n", s_range->pmr[0], s_range->pmr[1]);
+        printf("[set_search_range] Maximum grid ranges:\n");
+        printf("---------------------------------------\n");
+        printf("   |          min              max\n");
+        printf("---------------------------------------\n");
+        printf("mm | %12g     %12g\n", s_range->mr[0], s_range->mr[1]);
+        printf("nn | %12g     %12g\n", s_range->nr[0], s_range->nr[1]);
+        printf("s  | %12g     %12g\n", s_range->spndr[0], s_range->spndr[1]);
+        printf("f  | %12d     %12d\n", s_range->fr[0], s_range->fr[1]);
+        printf("---------------------------------------\n\n");
 
-     } else {
-          // setup grid center
-          if (strcmp(opts->gcenter, "injection")==0) {
-               printf("Setting grid center at the current injection point.\n");
-               // get fr, sr, alphar, deltar from from aux->injection
-               printf("This option is not implemented.\n");
-               // WIP INJ
-               exit(EXIT_FAILURE);
-          } else if (strncmp(opts->gcenter, "pulsar", 6) == 0) {
-               printf("Setting grid center at pulsar %s\n", opts->gcenter);
-               // set fr, sr, alphar, deltar from ???define/hash table???
-               printf("This option is not implemented.\n");
-               exit(EXIT_FAILURE);
-          } else {
-               printf("Reading grid center\n");
-               sscanf(opts->gcenter, "%f %f %f %f", &fr, &sr, &alphar, &deltar);
-          }
+    } else {
+        // setup grid center
+        if (strcmp(opts->gcenter, "injection")==0) {
+            if (inj == NULL) {
+                printf("[ERROR] gcenter = injection but no injection given\n");
+                exit(EXIT_FAILURE);
+            }
+            // frequency at the start of the segment (spindown from t_ref, as in add_injection)
+            fr = inj->f + inj->fdot*(ifo[0].start_time - inj->t_ref);
+            sr = inj->fdot;
+            alphar = inj->ra;
+            deltar = inj->dec;
+            printf("Setting grid center at injection id=%d\n", inj->id);
+            if (fr < sett->fpo || fr > sett->fpo + sett->B) {
+                printf("[ERROR] injection id=%d out of band f=%g, grid center outside the band\n", inj->id, fr);
+                exit(EXIT_FAILURE);
+            }
+        } else {
+            printf("Reading grid center\n");
+            if (sscanf(opts->gcenter, "%f %f %f %f", &fr, &sr, &alphar, &deltar) != 4) {
+                printf("[ERROR] gcenter = %s: must be 'f fdot ra dec' or 'injection'\n", opts->gcenter);
+                exit(EXIT_FAILURE);
+            }
+        }
 
-          // setup grid sizes
-          if (opts->gsizes) {
-               sscanf(opts->gsizes, "%d %f %f %f", &fr_gsize, &sr_gsize, &mr_gsize, &nr_gsize);
-          } else {
-               printf("[ERROR] missing gsizes!\n");
-               exit(EXIT_FAILURE);
-          }
+        // setup grid sizes
+        if (opts->gsizes) {
+            sscanf(opts->gsizes, "%d %f %f %f", &fr_gsize, &sr_gsize, &mr_gsize, &nr_gsize);
+        } else {
+            printf("[ERROR] missing gsizes!\n");
+            exit(EXIT_FAILURE);
+        }
 
-          // setup grid steps
-          if (opts->gsteps) {
-               sscanf(opts->gsteps, "%d %f %f %f", &fr_step, &sr_step, &mr_step, &nr_step);
-          } else {
-               printf("[ERROR] missing gsteps!\n");
-               exit(EXIT_FAILURE);
-          }
+        // setup grid steps
+        if (opts->gsteps) {
+            sscanf(opts->gsteps, "%d %f %f %f", &fr_step, &sr_step, &mr_step, &nr_step);
+        } else {
+            printf("[ERROR] missing gsteps!\n");
+            exit(EXIT_FAILURE);
+        }
 
-          fr_step = 1; // fr_step is always 1 (just FFT bin numbers)
+        fr_step = 1; // fr_step is always 1 (just FFT bin numbers)
 
-          // convert fr, sr, alphar, deltar to fractional code units
+        // convert fr, sr, alphar, deltar to fractional code units
 
-          // first convert from physical to dimensionless units
-          //sgnlol[0] = (fr - sett->fpo)/sett->B * M_PI;
-          sgnlol[0] = 0.;
-          sgnlol[1] = M_PI * sr * sett->dt * sett->dt;
+        // first convert from physical to dimensionless units
+        //sgnlol[0] = (fr - sett->fpo)/sett->B * M_PI;
+        sgnlol[0] = 0.;
+        sgnlol[1] = M_PI * sr * sett->dt * sett->dt;
 
-          double cof = sett->oms; //+ sgnlol[0];
-          double be[2];
-          s_range->pmr[0] = ast2lin((double)alphar, (double)deltar, C_EPSMA, be);
-          s_range->pmr[1] = s_range->pmr[0];
-          sgnlol[2] = be[0]*cof;
-          sgnlol[3] = be[1]*cof;
+        double cof = sett->oms; //+ sgnlol[0];
+        double be[2];
+        s_range->pmr[0] = ast2lin((double)alphar, (double)deltar, C_EPSMA, be);
+        s_range->pmr[1] = s_range->pmr[0];
+        sgnlol[2] = be[0]*cof;
+        sgnlol[3] = be[1]*cof;
 
-          // dimensionless to code units conversion
-          float *sgnl_code = (float *) calloc(4, sizeof(float));
-          dimless_to_code(sett->M, sgnlol, sgnl_code);
+        // dimensionless to code units conversion
+        float *sgnl_code = (float *) calloc(4, sizeof(float));
+        dimless_to_code(sett->M, sgnlol, sgnl_code);
 
-          // reverse conversions from jobcore()
-          FLOAT_TYPE sgnl0;
-          double het1, het0;
-          het0 = fmod(sgnl_code[2]*sett->M[8] + sgnl_code[3]*sett->M[12], sett->M[0]);
-          het1 = fmod(sgnl_code[1]*sett->M[4], sett->M[0]);
-          if(het1<0) het1 += sett->M[0];
-          sgnl0 = het0 + het1;
+        // reverse conversions from jobcore()
+        FLOAT_TYPE sgnl0;
+        double het1, het0;
+        het0 = fmod(sgnl_code[2]*sett->M[8] + sgnl_code[3]*sett->M[12], sett->M[0]);
+        het1 = fmod(sgnl_code[1]*sett->M[4], sett->M[0]);
+        if(het1<0) het1 += sett->M[0];
+        sgnl0 = het0 + het1;
 
-          sgnl_code[0] = (fr - sett->fpo)/sett->B * sett->nfftf/2 - sgnl0*sett->nfftf/(2*M_PI);
-          //printf("di(sgnl0)=%g\n", sgnl0*sett->nfftf/(2*M_PI));
+        sgnl_code[0] = (fr - sett->fpo)/sett->B * sett->nfftf/2 - sgnl0*sett->nfftf/(2*M_PI);
+        //printf("di(sgnl0)=%g\n", sgnl0*sett->nfftf/(2*M_PI));
 
-          // Set the steps
-          s_range->mstep = mr_step;
-          s_range->nstep = nr_step;
-          s_range->sstep = sr_step;
+        // Set the steps
+        s_range->mstep = mr_step;
+        s_range->nstep = nr_step;
+        s_range->sstep = sr_step;
 
-          // round gsizes to integer multiples of steps
-          fr_gsize = round(fr_gsize);
-          sr_gsize = round(sr_gsize/sr_step)*sr_step;
-          nr_gsize = round(nr_gsize/nr_step)*nr_step;
-          mr_gsize = round(mr_gsize/mr_step)*mr_step;
+        // round gsizes to integer multiples of steps
+        fr_gsize = round(fr_gsize);
+        sr_gsize = round(sr_gsize/sr_step)*sr_step;
+        nr_gsize = round(nr_gsize/nr_step)*nr_step;
+        mr_gsize = round(mr_gsize/mr_step)*mr_step;
 
-          if ( strcmp(opts->gtype, "allsky_range") == 0) {
+        if ( strcmp(opts->gtype, "allsky_range") == 0) {
 
-               // nearest "integer" grid point to alphar, deltar, sr, fr.
-               fmid = round(sgnl_code[0]);
-               smid = round(sgnl_code[1]);
-               nmid = round(sgnl_code[2]);
-               mmid = round(sgnl_code[3]);
+            // nearest "integer" grid point to alphar, deltar, sr, fr.
+            fmid = round(sgnl_code[0]);
+            smid = round(sgnl_code[1]);
+            nmid = round(sgnl_code[2]);
+            mmid = round(sgnl_code[3]);
 
-          } else if (strcmp(opts->gtype, "directed_range") == 0) {
+        } else if (strcmp(opts->gtype, "directed_range") == 0) {
 
-               // exact position: alphar, deltar, sr, fr.
-               fmid = sgnl_code[0];
-               smid = sgnl_code[1];
-               nmid = sgnl_code[2];
-               mmid = sgnl_code[3];
+            // exact position: alphar, deltar, sr, fr.
+            fmid = sgnl_code[0];
+            smid = sgnl_code[1];
+            nmid = sgnl_code[2];
+            mmid = sgnl_code[3];
 
-          } else {
-               printf("Unknown grid type %s \n", opts->gtype);
-               exit(EXIT_FAILURE);
-          }
+        } else {
+            printf("Unknown grid type %s \n", opts->gtype);
+            exit(EXIT_FAILURE);
+        }
 
-          s_range->fr[0] = fmid - fr_gsize;
-          s_range->fr[1] = fmid + fr_gsize;
-          s_range->spndr[0] = smid - sr_gsize;
-          s_range->spndr[1] = smid + sr_gsize;
-          s_range->nr[0] = nmid - nr_gsize;
-          s_range->nr[1] = nmid + nr_gsize;
-          s_range->mr[0] = mmid - mr_gsize;
-          s_range->mr[1] = mmid + mr_gsize;
+        s_range->fr[0] = fmid - fr_gsize;
+        s_range->fr[1] = fmid + fr_gsize;
+        s_range->spndr[0] = smid - sr_gsize;
+        s_range->spndr[1] = smid + sr_gsize;
+        s_range->nr[0] = nmid - nr_gsize;
+        s_range->nr[1] = nmid + nr_gsize;
+        s_range->mr[0] = mmid - mr_gsize;
+        s_range->mr[1] = mmid + mr_gsize;
 
-          free(sgnl_code);
+        free(sgnl_code);
 
-          // TODO: check for out of scale ranges
+        // TODO: check for out of scale ranges
 
-          printf("[set_search_range] gtype = %s\n", opts->gtype);
-          printf("[set_search_range] gcenter: f=%g [Hz]  fdot=%g [Hz/s]  ra=%g [rad]  de=%g [rad]\n", fr, sr, alphar, deltar);
-          printf("[set_search_range] hemisphere = %d\n", s_range->pmr[0]);
-          printf("[set_search_range] Actual, computed grid ranges:\n");
-          printf("-----------------------------------------------------------------------\n");
-          printf("   |            min           center              max             step \n");
-          printf("-----------------------------------------------------------------------\n");
-          printf("mm |   %12g     %12g     %12g     %12g\n", s_range->mr[0], mmid, s_range->mr[1], s_range->mstep);
-          printf("nn |   %12g     %12g     %12g     %12g\n", s_range->nr[0], nmid, s_range->nr[1], s_range->nstep);
-          printf("s  |   %12g     %12g     %12g     %12g\n", s_range->spndr[0], smid, s_range->spndr[1], s_range->sstep);
-          printf("f  |   %12d     %12d     %12d     %12d\n", s_range->fr[0], fmid, s_range->fr[1], 1);
-          printf("-----------------------------------------------------------------------\n\n");
+        printf("[set_search_range] gtype = %s\n", opts->gtype);
+        printf("[set_search_range] gcenter: f=%g [Hz]  fdot=%g [Hz/s]  ra=%g [rad]  de=%g [rad]\n", fr, sr, alphar, deltar);
+        printf("[set_search_range] hemisphere = %d\n", s_range->pmr[0]);
+        printf("[set_search_range] Actual, computed grid ranges:\n");
+        printf("-----------------------------------------------------------------------\n");
+        printf("   |            min           center              max             step \n");
+        printf("-----------------------------------------------------------------------\n");
+        printf("mm |   %12g     %12g     %12g     %12g\n", s_range->mr[0], mmid, s_range->mr[1], s_range->mstep);
+        printf("nn |   %12g     %12g     %12g     %12g\n", s_range->nr[0], nmid, s_range->nr[1], s_range->nstep);
+        printf("s  |   %12g     %12g     %12g     %12g\n", s_range->spndr[0], smid, s_range->spndr[1], s_range->sstep);
+        printf("f  |   %12d     %12d     %12d     %12d\n", s_range->fr[0], fmid, s_range->fr[1], 1);
+        printf("-----------------------------------------------------------------------\n\n");
 
-     }
-
-     //exit(EXIT_SUCCESS);
-
+    }
 } // end of set_search_range
 
 

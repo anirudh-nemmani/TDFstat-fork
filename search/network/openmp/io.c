@@ -18,7 +18,7 @@ int hdfout_attr_init (char *outname, Command_line_opts *opts, Search_settings *s
 {
      // Create the output file (overwrite if it exists) and write file-level attributes:
      // format_version, git_commit, opts, sett, ifo and (if injections are used) inj
-     // inj is the array of all ninj injections (also in inj_mode=single)
+     // inj is the array of all ninj injections (also in inj_mode=serial)
      // Datasets (and their attributes) are created by hdfout_dset_init()
 
      hid_t     file;
@@ -146,7 +146,7 @@ int hdfout_attr_init (char *outname, Command_line_opts *opts, Search_settings *s
      H5Aclose(attr);
 
      // all injections (only if injections are used)
-     if (inj != NULL && ninj > 0 && opts->inj_mode && opts->inj_mode[0]) {
+     if (inj != NULL && ninj > 0 && opts->inj_mode) {
           hid_t inj_space_id = H5Screate_simple(1, (hsize_t[]){ninj}, NULL);
           attr = H5Acreate2(file, "inj", inj_tid, inj_space_id, H5P_DEFAULT, H5P_DEFAULT);
           hstat = H5Awrite(attr, inj_tid, inj);

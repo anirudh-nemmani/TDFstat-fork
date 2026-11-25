@@ -102,11 +102,11 @@ void search( Search_settings *sett,
         // WIP INJ
         // search_range should be an attribute of the dataset
         // if mode=null : add new empty dataset dset_name = triggers
-        // if mode=single : add new empty dataset dset_name = inj_id
+        // if mode=serial : add new empty dataset dset_name = inj_id
         // if mode=multi : add new empty dataset dset_name = inj_0
         char dset_name[32] = "triggers";
-        if (opts->inj_mode && opts->inj_mode[0]) {
-            if (strcmp(opts->inj_mode, "single") == 0) {
+        if (opts->inj_mode) {
+            if (strcmp(opts->inj_mode, "serial") == 0) {
                 snprintf(dset_name, sizeof(dset_name), "inj_%d", inj[inj_idx].id);
             } else if (strcmp(opts->inj_mode, "multi") == 0) {
                 strcpy(dset_name, "inj_0");   /* or snprintf; no format args needed */
@@ -115,10 +115,14 @@ void search( Search_settings *sett,
 
         // The file (and its file-level attributes) is created once, on the first injection
         // (inj_idx=0 always for inj_mode=NULL or multi); later injections add new datasets
-        if (inj_idx == 0) {
+        // With gcenter = injection the hemisphere follows the injection, so a hemisphere
+        // file can be first used after inj_idx = 0.
+        static int file_init[3] = {0, 0, 0};
+        if (!file_init[pm]) {
             // remove existing trigger file if checkpointing is disabled
             if (! opts->checkp_flag) remove(outname);
             hdfout_attr_init(outname, opts, sett, inj, ninj);
+            file_init[pm] = 1;
         }
         hdfout_dset_init(outname, dset_name, s_range, sgnlv);
 

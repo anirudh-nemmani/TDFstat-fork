@@ -104,15 +104,16 @@ int main (int argc, char* argv[])
 
     // Read injection file/dict to add injections (if multi mode)
     int ninj = 0;
-    if (opts.inj_mode && strlen(opts.inj_mode) > 0) {
+    if (opts.inj_mode) {
         ninj = read_injection(&opts, &inj);
         if (!strcmp(opts.inj_mode, "multi"))
             add_injection(&sett, &opts, &aux_arr, inj, ninj, inj_idx);
     }
-     // WIP INJ
-     // pass inj and inj_idx, if gcenter=inj then substiture current injection possition (issue an error if inj_mode=multi)
-     // establish search range (s_range)
-     set_search_range(&sett, &opts, &s_range);
+    // gcenter = injection: grid centered at the injection (only with inj_mode = serial, checked in read_ini_file)
+    int gc_inj = strcmp(opts.gtype, "allsky") != 0 && opts.gcenter && !strcmp(opts.gcenter, "injection");
+
+     // establish search range (s_range); gcenter = injection: centered at the first injection
+     set_search_range(&sett, &opts, &s_range, gc_inj ? &inj[0] : NULL);
 
      // FFT plans
      FFTW_plans fftw_plans;
@@ -124,9 +125,18 @@ int main (int argc, char* argv[])
      read_checkpoints(&opts, &s_range, &Fnum);
 
     // main search job
-    if (opts.inj_mode && !strcmp(opts.inj_mode, "single")) {
+    if (opts.inj_mode && !strcmp(opts.inj_mode, "serial")) {
         for (inj_idx=0; inj_idx<ninj; inj_idx++) {
-            // add injections (if single mode)
+            // gcenter = injection: grid centered at the current injection, search from its start
+            if (gc_inj && inj_idx > 0) {
+                set_search_range(&sett, &opts, &s_range, &inj[inj_idx]);
+                // WIP: small steps to bypass read_checkpoints for injections
+                s_range.pst = s_range.pmr[0];
+                s_range.mst = s_range.mr[0];
+                s_range.nst = s_range.nr[0];
+                s_range.sst = s_range.spndr[0];
+            }
+            // add injections (if serial mode)
             add_injection(&sett, &opts, &aux_arr, inj, ninj, inj_idx);
             search(&sett, &opts, &s_range, &fftw_plans, &fftw_arr, &aux_arr, &Fnum, inj, ninj, inj_idx);
         }

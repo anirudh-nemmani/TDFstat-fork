@@ -275,7 +275,7 @@ void modvir( double sinal, double cosal, double sindel, double cosdel,
 
      // Modulation factors aa, bb for every NON-ZERO data point
      for (t=0; t<Np; t++) {
-          if ( fabs(ifo->sig.xDat[t]) > DBL_MIN ) {
+          if ( fabs(ifo->sig.xDat[t]) > FLT_MIN ) {
                c = cosalfr*aux->cosmodf[t] + sinalfr*aux->sinmodf[t];
                s = sinalfr*aux->cosmodf[t] - cosalfr*aux->sinmodf[t];
                c2s = 2.*sqr(c);
